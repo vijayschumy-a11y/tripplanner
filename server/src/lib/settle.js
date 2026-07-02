@@ -5,10 +5,10 @@ export function computeBalances(expenses, shares) {
   const add = (u, v) => { bal[u] = (bal[u] || 0) + v; };
 
   for (const e of expenses) {
-    add(e.paid_by, e.amount); // payer fronted the money
+    add(e.paid_by, Number(e.amount)); // payer fronted the money
   }
   for (const s of shares) {
-    add(s.user_id, -s.share); // each participant owes their share
+    add(s.user_id, -Number(s.share)); // each participant owes their share
   }
   // round to paise
   for (const k of Object.keys(bal)) bal[k] = Math.round(bal[k] * 100) / 100;

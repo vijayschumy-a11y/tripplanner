@@ -12,16 +12,16 @@ function isMember(tripId, userId) {
 }
 
 // List expenses for a trip (with their shares)
-router.get('/trip/:tripId', (req, res) => {
-  if (!isMember(req.params.tripId, req.user.id)) return res.status(403).json({ error: 'Not a member' });
-  const expenses = db
+router.get('/trip/:tripId', async (req, res) => {
+  if (!(await isMember(req.params.tripId, req.user.id))) return res.status(403).json({ error: 'Not a member' });
+  const expenses = await db
     .prepare(
       `SELECT e.*, u.name AS payer_name, u.avatar_color AS payer_color
        FROM expenses e JOIN users u ON u.id = e.paid_by
        WHERE e.trip_id = ? ORDER BY e.created_at DESC`
     )
     .all(req.params.tripId);
-  const shareRows = db
+  const shareRows = await db
     .prepare(
       `SELECT s.* FROM expense_shares s JOIN expenses e ON e.id = s.expense_id WHERE e.trip_id = ?`
     )
@@ -33,22 +33,22 @@ router.get('/trip/:tripId', (req, res) => {
 });
 
 // Create expense with split
-router.post('/trip/:tripId', (req, res) => {
+router.post('/trip/:tripId', async (req, res) => {
   const tripId = req.params.tripId;
-  if (!isMember(tripId, req.user.id)) return res.status(403).json({ error: 'Not a member' });
+  if (!(await isMember(tripId, req.user.id))) return res.status(403).json({ error: 'Not a member' });
   const { title, amount, category, paid_by, split_type = 'equal', participants, shares } = req.body || {};
   if (!title || !amount || !paid_by) return res.status(400).json({ error: 'title, amount, paid_by required' });
 
-  const members = db.prepare('SELECT user_id FROM trip_members WHERE trip_id = ?').all(tripId).map((r) => r.user_id);
+  const members = (await db.prepare('SELECT user_id FROM trip_members WHERE trip_id = ?').all(tripId)).map((r) => r.user_id);
   let shareMap = {}; // userId -> amount owed
 
   if (split_type === 'custom' && shares) {
-    // shares: { userId: amount }
     const sum = Object.values(shares).reduce((a, b) => a + Number(b || 0), 0);
     if (Math.abs(sum - amount) > 0.05) return res.status(400).json({ error: 'Custom shares must sum to amount' });
     shareMap = shares;
   } else {
     const people = (participants && participants.length ? participants : members).filter((u) => members.includes(u));
+    if (!people.length) return res.status(400).json({ error: 'No participants' });
     const each = Math.round((amount / people.length) * 100) / 100;
     let allocated = 0;
     people.forEach((u, i) => {
@@ -59,47 +59,46 @@ router.post('/trip/:tripId', (req, res) => {
   }
 
   const id = nanoid();
-  const insertExpense = db.prepare(
-    'INSERT INTO expenses (id, trip_id, title, category, amount, paid_by, split_type) VALUES (?, ?, ?, ?, ?, ?, ?)'
-  );
-  const insertShare = db.prepare('INSERT INTO expense_shares (expense_id, user_id, share) VALUES (?, ?, ?)');
-  db.exec('BEGIN');
   try {
-    insertExpense.run(id, tripId, title, category || 'general', amount, paid_by, split_type);
-    for (const [uid, val] of Object.entries(shareMap)) insertShare.run(id, uid, Number(val));
-    db.exec('COMMIT');
-  } catch (err) {
-    db.exec('ROLLBACK');
+    await db.tx(async (t) => {
+      await t.prepare(
+        'INSERT INTO expenses (id, trip_id, title, category, amount, paid_by, split_type) VALUES (?, ?, ?, ?, ?, ?, ?)'
+      ).run(id, tripId, title, category || 'general', amount, paid_by, split_type);
+      for (const [uid, val] of Object.entries(shareMap)) {
+        await t.prepare('INSERT INTO expense_shares (expense_id, user_id, share) VALUES (?, ?, ?)').run(id, uid, Number(val));
+      }
+    });
+  } catch {
     return res.status(500).json({ error: 'Could not save expense' });
   }
 
-  res.json({ expense: db.prepare('SELECT * FROM expenses WHERE id = ?').get(id) });
+  res.json({ expense: await db.prepare('SELECT * FROM expenses WHERE id = ?').get(id) });
 });
 
-router.delete('/:expenseId', (req, res) => {
-  const exp = db.prepare('SELECT * FROM expenses WHERE id = ?').get(req.params.expenseId);
+router.delete('/:expenseId', async (req, res) => {
+  const exp = await db.prepare('SELECT * FROM expenses WHERE id = ?').get(req.params.expenseId);
   if (!exp) return res.status(404).json({ error: 'Not found' });
-  if (!isMember(exp.trip_id, req.user.id)) return res.status(403).json({ error: 'Not a member' });
-  db.prepare('DELETE FROM expenses WHERE id = ?').run(req.params.expenseId);
+  if (!(await isMember(exp.trip_id, req.user.id))) return res.status(403).json({ error: 'Not a member' });
+  await db.prepare('DELETE FROM expenses WHERE id = ?').run(req.params.expenseId);
   res.json({ ok: true });
 });
 
 // Balances + who-owes-whom settlement plan
-router.get('/trip/:tripId/summary', (req, res) => {
+router.get('/trip/:tripId/summary', async (req, res) => {
   const tripId = req.params.tripId;
-  if (!isMember(tripId, req.user.id)) return res.status(403).json({ error: 'Not a member' });
-  const expenses = db.prepare('SELECT id, amount, paid_by FROM expenses WHERE trip_id = ?').all(tripId);
-  const shares = db
+  if (!(await isMember(tripId, req.user.id))) return res.status(403).json({ error: 'Not a member' });
+  const expenses = await db.prepare('SELECT id, amount, paid_by FROM expenses WHERE trip_id = ?').all(tripId);
+  const shares = await db
     .prepare('SELECT s.user_id, s.share FROM expense_shares s JOIN expenses e ON e.id = s.expense_id WHERE e.trip_id = ?')
     .all(tripId);
-  const members = db
+  const members = await db
     .prepare(`SELECT u.id, u.name, u.avatar_color FROM trip_members m JOIN users u ON u.id = m.user_id WHERE m.trip_id = ?`)
     .all(tripId);
 
   const balances = computeBalances(expenses, shares);
   for (const m of members) if (!(m.id in balances)) balances[m.id] = 0;
 
-  const total = expenses.reduce((a, e) => a + e.amount, 0);
+  const total = expenses.reduce((a, e) => a + Number(e.amount), 0);
   const nameOf = Object.fromEntries(members.map((m) => [m.id, m]));
 
   res.json({

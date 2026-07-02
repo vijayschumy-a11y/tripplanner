@@ -1,7 +1,9 @@
 // CLI seeding. Run: npm run seed
+import db from './db.js';
 import { seedIfEmpty } from './lib/seedData.js';
 
-const res = seedIfEmpty();
+await db.init();
+const res = await seedIfEmpty();
 if (res.seeded) {
   console.log('Seed complete. Demo trip id:', res.tripId);
 } else {

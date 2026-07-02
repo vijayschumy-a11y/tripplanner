@@ -18,10 +18,11 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const PORT = process.env.PORT || 4000;
 const CLIENT_ORIGIN = process.env.CLIENT_ORIGIN || 'http://localhost:5173';
 
-// Ensure the app is usable immediately after a fresh/ephemeral deploy.
+// Create tables (idempotent), then seed demo data if the DB is empty.
+await db.init();
 if (process.env.SEED_ON_BOOT !== 'false') {
   try {
-    const r = seedIfEmpty();
+    const r = await seedIfEmpty();
     if (r.seeded) console.log('  Seeded demo data (empty database).');
   } catch (e) {
     console.warn('  Seed skipped:', e.message);
@@ -51,6 +52,9 @@ if (fs.existsSync(clientDist)) {
 const server = http.createServer(app);
 const io = new Server(server, { cors: { origin: '*' } });
 
+const isMember = (tripId, userId) =>
+  db.prepare('SELECT 1 FROM trip_members WHERE trip_id = ? AND user_id = ?').get(tripId, userId);
+
 // --- Realtime: live location sharing + trip chat ---
 io.use((socket, next) => {
   const payload = verifyToken(socket.handshake.auth?.token);
@@ -62,41 +66,49 @@ io.use((socket, next) => {
 io.on('connection', (socket) => {
   const user = socket.user;
 
-  socket.on('trip:join', (tripId) => {
-    const member = db.prepare('SELECT 1 FROM trip_members WHERE trip_id = ? AND user_id = ?').get(tripId, user.id);
-    if (!member) return;
-    socket.join(tripId);
-    // send current locations snapshot to the newcomer
-    const locs = db
-      .prepare(
-        `SELECT l.user_id, l.lat, l.lng, l.updated_at, u.name, u.avatar_color
-         FROM locations l JOIN users u ON u.id = l.user_id WHERE l.trip_id = ?`
-      )
-      .all(tripId);
-    socket.emit('location:snapshot', locs);
-    socket.to(tripId).emit('presence:online', { userId: user.id, name: user.name });
+  socket.on('trip:join', async (tripId) => {
+    try {
+      if (!(await isMember(tripId, user.id))) return;
+      socket.join(tripId);
+      const locs = await db
+        .prepare(
+          `SELECT l.user_id, l.lat, l.lng, l.updated_at, u.name, u.avatar_color
+           FROM locations l JOIN users u ON u.id = l.user_id WHERE l.trip_id = ?`
+        )
+        .all(tripId);
+      socket.emit('location:snapshot', locs);
+      socket.to(tripId).emit('presence:online', { userId: user.id, name: user.name });
+    } catch (e) {
+      console.error('trip:join error', e.message);
+    }
   });
 
-  socket.on('location:update', ({ tripId, lat, lng }) => {
+  socket.on('location:update', async ({ tripId, lat, lng }) => {
     if (lat == null || lng == null) return;
-    const member = db.prepare('SELECT 1 FROM trip_members WHERE trip_id = ? AND user_id = ?').get(tripId, user.id);
-    if (!member) return;
-    db.prepare(
-      `INSERT INTO locations (trip_id, user_id, lat, lng, updated_at) VALUES (?, ?, ?, ?, datetime('now'))
-       ON CONFLICT(trip_id, user_id) DO UPDATE SET lat = excluded.lat, lng = excluded.lng, updated_at = datetime('now')`
-    ).run(tripId, user.id, lat, lng);
-    io.to(tripId).emit('location:update', {
-      userId: user.id, name: user.name, avatar_color: user.avatar_color, lat, lng, updated_at: new Date().toISOString(),
-    });
+    try {
+      if (!(await isMember(tripId, user.id))) return;
+      await db.prepare(
+        `INSERT INTO locations (trip_id, user_id, lat, lng, updated_at) VALUES (?, ?, ?, ?, now())
+         ON CONFLICT (trip_id, user_id) DO UPDATE SET lat = EXCLUDED.lat, lng = EXCLUDED.lng, updated_at = now()`
+      ).run(tripId, user.id, lat, lng);
+      io.to(tripId).emit('location:update', {
+        userId: user.id, name: user.name, avatar_color: user.avatar_color, lat, lng, updated_at: new Date().toISOString(),
+      });
+    } catch (e) {
+      console.error('location:update error', e.message);
+    }
   });
 
-  socket.on('chat:message', ({ tripId, text }) => {
+  socket.on('chat:message', async ({ tripId, text }) => {
     if (!text) return;
-    const member = db.prepare('SELECT 1 FROM trip_members WHERE trip_id = ? AND user_id = ?').get(tripId, user.id);
-    if (!member) return;
-    io.to(tripId).emit('chat:message', {
-      userId: user.id, name: user.name, text, at: new Date().toISOString(),
-    });
+    try {
+      if (!(await isMember(tripId, user.id))) return;
+      io.to(tripId).emit('chat:message', {
+        userId: user.id, name: user.name, text, at: new Date().toISOString(),
+      });
+    } catch (e) {
+      console.error('chat:message error', e.message);
+    }
   });
 
   socket.on('disconnect', () => {});
