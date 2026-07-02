@@ -1,0 +1,21 @@
+# Render Blueprint — deploys the whole app as ONE always-on web service.
+# The Node server builds & serves the React client + REST API + Socket.IO on a single port.
+services:
+  - type: web
+    name: tripplanner
+    runtime: node
+    plan: free
+    region: singapore            # closest Render region to India
+    buildCommand: npm install --prefix server && npm install --prefix client && npm run build --prefix client
+    startCommand: node server/src/index.js
+    healthCheckPath: /api/health
+    autoDeploy: true
+    envVars:
+      - key: NODE_VERSION
+        value: "26"
+      - key: JWT_SECRET
+        generateValue: true      # Render generates a strong secret for you
+      - key: SEED_ON_BOOT
+        value: "true"            # demo trip is recreated if the DB is empty
+      # For real data that survives restarts, attach a Render Disk and set:
+      #   DB_PATH = /data/data.sqlite   (requires a paid instance + a Disk mounted at /data)
