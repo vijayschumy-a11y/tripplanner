@@ -13,6 +13,7 @@ import authRoutes from './routes/auth.js';
 import tripRoutes from './routes/trips.js';
 import expenseRoutes from './routes/expenses.js';
 import placeRoutes from './routes/places.js';
+import planRoutes from './routes/plan.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const PORT = process.env.PORT || 4000;
@@ -38,6 +39,7 @@ app.use('/api/auth', authRoutes);
 app.use('/api/trips', tripRoutes);
 app.use('/api/expenses', expenseRoutes);
 app.use('/api/places', placeRoutes);
+app.use('/api/plan', planRoutes);
 
 // Serve built client if present (production single-server mode)
 const clientDist = path.join(__dirname, '..', '..', 'client', 'dist');

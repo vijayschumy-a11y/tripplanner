@@ -8,9 +8,11 @@ import Explore from '../components/Explore.jsx';
 import Itinerary from '../components/Itinerary.jsx';
 import LiveMap from '../components/LiveMap.jsx';
 import Checklist from '../components/Checklist.jsx';
+import Plan from '../components/Plan.jsx';
 
 const TABS = [
   ['overview', 'Overview', '🏠'],
+  ['plan', 'Plan', '✨'],
   ['expenses', 'Split', '💸'],
   ['explore', 'Explore', '🗺️'],
   ['itinerary', 'Itinerary', '📅'],
@@ -54,6 +56,7 @@ export default function TripDetail() {
       </div>
 
       {tab === 'overview' && <Overview trip={trip} members={members} onGo={setTab} />}
+      {tab === 'plan' && <Plan tripId={id} trip={trip} />}
       {tab === 'expenses' && <Expenses tripId={id} members={members} />}
       {tab === 'explore' && <Explore trip={trip} />}
       {tab === 'itinerary' && <Itinerary tripId={id} trip={trip} />}
@@ -96,6 +99,7 @@ function Overview({ trip, members, onGo }) {
       <div className="card">
         <h3 className="section-title">Quick actions</h3>
         <div className="grid-trips" style={{ gridTemplateColumns: 'repeat(auto-fill, minmax(150px,1fr))' }}>
+          <Action icon="✨" label="Auto-plan trip" onClick={() => onGo('plan')} />
           <Action icon="💸" label="Add expense" onClick={() => onGo('expenses')} />
           <Action icon="🍽️" label="Find food" onClick={() => onGo('explore')} />
           <Action icon="🏧" label="Nearby ATM" onClick={() => onGo('explore')} />
