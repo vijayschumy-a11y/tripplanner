@@ -9,11 +9,14 @@ export default function Expenses({ tripId, members }) {
   const { user } = useAuth();
   const toast = useToast();
   const [expenses, setExpenses] = useState([]);
+  const [advances, setAdvances] = useState([]);
   const [summary, setSummary] = useState(null);
   const [showAdd, setShowAdd] = useState(false);
+  const [showAdvance, setShowAdvance] = useState(false);
 
   const load = () => {
     api.get(`/expenses/trip/${tripId}`).then((d) => setExpenses(d.expenses));
+    api.get(`/expenses/trip/${tripId}/advances`).then((d) => setAdvances(d.advances));
     api.get(`/expenses/trip/${tripId}/summary`).then(setSummary);
   };
   useEffect(() => { load(); }, [tripId]);
@@ -23,13 +26,18 @@ export default function Expenses({ tripId, members }) {
     catch (e) { toast(e.message); }
   };
 
+  const delAdvance = async (id) => {
+    try { await api.del(`/expenses/advances/${id}`); load(); toast('Advance removed'); }
+    catch (e) { toast(e.message); }
+  };
+
   return (
     <div className="detail-grid">
       <div>
         <div className="card" style={{ marginBottom: 16 }}>
           <div className="between">
             <h3 className="section-title" style={{ margin: 0 }}>Settle up</h3>
-            {summary && <span className="muted">{rupee(summary.total)} total</span>}
+            {summary && <span className="muted">{rupee(summary.total)} spent{summary.advancesTotal > 0 ? ` · ${rupee(summary.advancesTotal)} kitty` : ''}</span>}
           </div>
           {summary && (
             <>
@@ -59,6 +67,28 @@ export default function Expenses({ tripId, members }) {
               {summary.settlements.length === 0 && <p className="muted">All settled up 🎉</p>}
             </>
           )}
+        </div>
+
+        <div className="card">
+          <div className="between">
+            <h3 className="section-title" style={{ margin: 0 }}>Advances / kitty 💰</h3>
+            <button className="btn primary sm" onClick={() => setShowAdvance(true)}>+ Collect advance</button>
+          </div>
+          <p className="muted" style={{ fontSize: 13, marginTop: 4 }}>Money collected up front (e.g. ₹3000/head for food & stay). Credited to each person in the settle-up.</p>
+          {advances.length === 0 && <p className="muted" style={{ fontSize: 13 }}>No advances collected yet.</p>}
+          {advances.map((a) => (
+            <div key={a.id} className="list-item">
+              <div className="avatar" style={{ background: 'var(--surface)' }}>{CATEGORY_ICON[a.category] || '💰'}</div>
+              <div className="grow">
+                <strong>{rupee(a.per_person)} × {a.count} people</strong>
+                <div className="muted" style={{ fontSize: 13 }}>collected by {a.collector_name}{a.note ? ` · ${a.note}` : ''}</div>
+              </div>
+              <div style={{ textAlign: 'right' }}>
+                <strong>{rupee(a.per_person * a.count)}</strong>
+                <div><button className="btn danger sm" style={{ marginTop: 4 }} onClick={() => delAdvance(a.id)}>✕</button></div>
+              </div>
+            </div>
+          ))}
         </div>
       </div>
 
@@ -90,7 +120,70 @@ export default function Expenses({ tripId, members }) {
           onClose={() => setShowAdd(false)}
           onSaved={() => { setShowAdd(false); load(); toast('Expense added'); }} />
       )}
+      {showAdvance && (
+        <AddAdvance tripId={tripId} members={members} me={user}
+          onClose={() => setShowAdvance(false)}
+          onSaved={() => { setShowAdvance(false); load(); toast('Advance recorded'); }} />
+      )}
     </div>
+  );
+}
+
+function AddAdvance({ tripId, members, me, onClose, onSaved }) {
+  const toast = useToast();
+  const [collector, setCollector] = useState(me.id);
+  const [perPerson, setPerPerson] = useState('');
+  const [category, setCategory] = useState('stay');
+  const [note, setNote] = useState('');
+  const [participants, setParticipants] = useState(members.map((m) => m.id));
+  const [busy, setBusy] = useState(false);
+
+  const toggle = (id) => setParticipants((p) => (p.includes(id) ? p.filter((x) => x !== id) : [...p, id]));
+
+  const save = async () => {
+    const per = Number(perPerson);
+    if (!per) return toast('Enter an amount per person');
+    if (!participants.length) return toast('Pick at least one person');
+    setBusy(true);
+    try {
+      await api.post(`/expenses/trip/${tripId}/advances`, {
+        collector_id: collector, per_person: per, category, note, participants,
+      });
+      onSaved();
+    } catch (e) { toast(e.message); setBusy(false); }
+  };
+
+  const total = (Number(perPerson) || 0) * participants.length;
+
+  return (
+    <Modal title="Collect an advance" onClose={onClose}>
+      <div className="row">
+        <div className="field grow"><label>Collected by</label>
+          <select value={collector} onChange={(e) => setCollector(e.target.value)}>
+            {members.map((m) => <option key={m.id} value={m.id}>{m.name}</option>)}
+          </select></div>
+        <div className="field grow"><label>Category</label>
+          <select value={category} onChange={(e) => setCategory(e.target.value)}>
+            {['stay', 'food', 'transport', 'general'].map((c) => <option key={c} value={c}>{CATEGORY_ICON[c]} {c}</option>)}
+          </select></div>
+      </div>
+      <div className="field"><label>Amount per person (₹)</label>
+        <input className="input" type="number" value={perPerson} onChange={(e) => setPerPerson(e.target.value)} placeholder="3000" /></div>
+      <div className="field"><label>Note (optional)</label>
+        <input className="input" value={note} onChange={(e) => setNote(e.target.value)} placeholder="Advance for food & stay" /></div>
+      <div className="field"><label>Collected from</label>
+        {members.map((m) => (
+          <label key={m.id} className="list-item" style={{ cursor: 'pointer' }}>
+            <input type="checkbox" checked={participants.includes(m.id)} onChange={() => toggle(m.id)} style={{ width: 'auto' }} />
+            <span className="grow">{m.name}</span>
+            {participants.includes(m.id) && <span className="muted">{rupee(Number(perPerson) || 0)}</span>}
+          </label>
+        ))}
+      </div>
+      <button className="btn primary" style={{ width: '100%' }} onClick={save} disabled={busy}>
+        {busy ? 'Saving…' : `Record ${rupee(total)} advance`}
+      </button>
+    </Modal>
   );
 }
 

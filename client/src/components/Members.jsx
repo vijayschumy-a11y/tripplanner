@@ -3,12 +3,17 @@ import { api } from '../lib/api.js';
 import { Avatar, useToast } from '../lib/ui.jsx';
 import { useAuth } from '../App.jsx';
 
+const ROLE_BADGE = { owner: 'Owner ⭐', 'sub-admin': 'Sub-admin 🛡️' };
+
 export default function Members({ tripId, trip, members, onChange }) {
   const { user } = useAuth();
   const toast = useToast();
   const [email, setEmail] = useState('');
   const [busy, setBusy] = useState(false);
+
   const isOwner = trip.owner_id === user.id;
+  const myRole = members.find((m) => m.id === user.id)?.role;
+  const isAdmin = myRole === 'owner' || myRole === 'sub-admin';
 
   const add = async () => {
     if (!email) return;
@@ -27,16 +32,35 @@ export default function Members({ tripId, trip, members, onChange }) {
     catch (e) { toast(e.message); }
   };
 
+  const setRole = async (uid, role) => {
+    try {
+      await api.patch(`/trips/${tripId}/members/${uid}/role`, { role });
+      onChange();
+      toast(role === 'sub-admin' ? 'Made sub-admin 🛡️' : 'Role removed');
+    } catch (e) { toast(e.message); }
+  };
+
   return (
     <div className="detail-grid">
       <div className="card">
         <h3 className="section-title">Invite someone</h3>
-        <p className="muted" style={{ fontSize: 13, marginTop: 0 }}>Add a travel buddy by their registered email. They'll see the trip, expenses and live map.</p>
-        <div className="row">
-          <input className="input" value={email} onChange={(e) => setEmail(e.target.value)} placeholder="friend@email.com" onKeyDown={(e) => e.key === 'Enter' && add()} />
-          <button className="btn primary" onClick={add} disabled={busy}>Add</button>
-        </div>
-        <p className="muted" style={{ fontSize: 12, marginTop: 10 }}>Demo emails: arjun@demo.in, priya@demo.in, karthik@demo.in</p>
+        {isAdmin ? (
+          <>
+            <p className="muted" style={{ fontSize: 13, marginTop: 0 }}>Add a travel buddy by their registered email. They'll see the trip, expenses and live map.</p>
+            <div className="row">
+              <input className="input" value={email} onChange={(e) => setEmail(e.target.value)} placeholder="friend@email.com" onKeyDown={(e) => e.key === 'Enter' && add()} />
+              <button className="btn primary" onClick={add} disabled={busy}>Add</button>
+            </div>
+            <p className="muted" style={{ fontSize: 12, marginTop: 10 }}>Demo emails: arjun@demo.in, priya@demo.in, karthik@demo.in</p>
+          </>
+        ) : (
+          <p className="muted" style={{ fontSize: 13 }}>Only the owner or a sub-admin can add or manage people.</p>
+        )}
+        {isOwner && (
+          <p className="muted" style={{ fontSize: 12, marginTop: 10 }}>
+            🛡️ Tip: make a trusted member a <strong>sub-admin</strong> so they can add people and manage the trip with you.
+          </p>
+        )}
       </div>
 
       <div className="card">
@@ -46,10 +70,18 @@ export default function Members({ tripId, trip, members, onChange }) {
             <Avatar user={m} />
             <div className="grow">
               <strong>{m.name}{m.id === user.id ? ' (you)' : ''}</strong>
-              <div className="muted" style={{ fontSize: 13 }}>{m.email}</div>
+              <div className="muted" style={{ fontSize: 13 }}>{m.email || m.phone || ''}</div>
             </div>
-            {m.role === 'owner' ? <span className="pill">Owner ⭐</span>
-              : (isOwner || m.id === user.id) && <button className="btn danger sm" onClick={() => remove(m.id)}>Remove</button>}
+            {ROLE_BADGE[m.role] && <span className="pill">{ROLE_BADGE[m.role]}</span>}
+            {/* Owner can promote/demote non-owner members */}
+            {isOwner && m.role !== 'owner' && (
+              m.role === 'sub-admin'
+                ? <button className="btn sm" onClick={() => setRole(m.id, 'member')}>Remove admin</button>
+                : <button className="btn sm" onClick={() => setRole(m.id, 'sub-admin')}>Make sub-admin</button>
+            )}
+            {m.role !== 'owner' && (isAdmin || m.id === user.id) && (
+              <button className="btn danger sm" onClick={() => remove(m.id)}>Remove</button>
+            )}
           </div>
         ))}
       </div>

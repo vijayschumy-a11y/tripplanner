@@ -83,7 +83,53 @@ router.delete('/:expenseId', async (req, res) => {
   res.json({ ok: true });
 });
 
-// Balances + who-owes-whom settlement plan
+// ---- Advances / kitty ----
+router.get('/trip/:tripId/advances', async (req, res) => {
+  if (!(await isMember(req.params.tripId, req.user.id))) return res.status(403).json({ error: 'Not a member' });
+  const advances = await db
+    .prepare(
+      `SELECT a.*, u.name AS collector_name, u.avatar_color AS collector_color,
+              (SELECT COUNT(*) FROM advance_participants p WHERE p.advance_id = a.id) AS count
+       FROM advances a JOIN users u ON u.id = a.collector_id
+       WHERE a.trip_id = ? ORDER BY a.created_at DESC`
+    )
+    .all(req.params.tripId);
+  res.json({ advances });
+});
+
+router.post('/trip/:tripId/advances', async (req, res) => {
+  const tripId = req.params.tripId;
+  if (!(await isMember(tripId, req.user.id))) return res.status(403).json({ error: 'Not a member' });
+  const { collector_id, per_person, category, note, participants } = req.body || {};
+  if (!collector_id || !per_person) return res.status(400).json({ error: 'collector_id and per_person required' });
+  const members = (await db.prepare('SELECT user_id FROM trip_members WHERE trip_id = ?').all(tripId)).map((r) => r.user_id);
+  const people = (participants && participants.length ? participants : members).filter((u) => members.includes(u));
+  if (!people.length) return res.status(400).json({ error: 'No participants' });
+
+  const id = nanoid();
+  try {
+    await db.tx(async (t) => {
+      await t.prepare('INSERT INTO advances (id, trip_id, collector_id, per_person, category, note) VALUES (?, ?, ?, ?, ?, ?)')
+        .run(id, tripId, collector_id, Number(per_person), category || 'general', note ?? null);
+      for (const uid of people) {
+        await t.prepare('INSERT INTO advance_participants (advance_id, user_id) VALUES (?, ?)').run(id, uid);
+      }
+    });
+  } catch {
+    return res.status(500).json({ error: 'Could not save advance' });
+  }
+  res.json({ advance: await db.prepare('SELECT * FROM advances WHERE id = ?').get(id) });
+});
+
+router.delete('/advances/:advanceId', async (req, res) => {
+  const adv = await db.prepare('SELECT * FROM advances WHERE id = ?').get(req.params.advanceId);
+  if (!adv) return res.status(404).json({ error: 'Not found' });
+  if (!(await isMember(adv.trip_id, req.user.id))) return res.status(403).json({ error: 'Not a member' });
+  await db.prepare('DELETE FROM advances WHERE id = ?').run(req.params.advanceId);
+  res.json({ ok: true });
+});
+
+// Balances + who-owes-whom settlement plan (expenses + advances)
 router.get('/trip/:tripId/summary', async (req, res) => {
   const tripId = req.params.tripId;
   if (!(await isMember(tripId, req.user.id))) return res.status(403).json({ error: 'Not a member' });
@@ -91,19 +137,28 @@ router.get('/trip/:tripId/summary', async (req, res) => {
   const shares = await db
     .prepare('SELECT s.user_id, s.share FROM expense_shares s JOIN expenses e ON e.id = s.expense_id WHERE e.trip_id = ?')
     .all(tripId);
+  const advances = await db.prepare('SELECT id, collector_id, per_person FROM advances WHERE trip_id = ?').all(tripId);
+  const advanceParts = await db
+    .prepare('SELECT p.advance_id, p.user_id FROM advance_participants p JOIN advances a ON a.id = p.advance_id WHERE a.trip_id = ?')
+    .all(tripId);
   const members = await db
     .prepare(`SELECT u.id, u.name, u.avatar_color FROM trip_members m JOIN users u ON u.id = m.user_id WHERE m.trip_id = ?`)
     .all(tripId);
 
-  const balances = computeBalances(expenses, shares);
+  const balances = computeBalances(expenses, shares, advances, advanceParts);
   for (const m of members) if (!(m.id in balances)) balances[m.id] = 0;
 
   const total = expenses.reduce((a, e) => a + Number(e.amount), 0);
+  const advancesTotal = advanceParts.reduce((sum, p) => {
+    const a = advances.find((x) => x.id === p.advance_id);
+    return sum + (a ? Number(a.per_person) : 0);
+  }, 0);
   const nameOf = Object.fromEntries(members.map((m) => [m.id, m]));
 
   res.json({
     total: Math.round(total * 100) / 100,
     perHead: members.length ? Math.round((total / members.length) * 100) / 100 : 0,
+    advancesTotal: Math.round(advancesTotal * 100) / 100,
     balances: members.map((m) => ({ ...m, net: balances[m.id] || 0 })),
     settlements: settlements(balances).map((s) => ({
       from: nameOf[s.from],

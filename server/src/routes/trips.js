@@ -11,6 +11,12 @@ function isMember(tripId, userId) {
   return db.prepare('SELECT 1 FROM trip_members WHERE trip_id = ? AND user_id = ?').get(tripId, userId);
 }
 
+// Owner or sub-admin
+async function isAdmin(tripId, userId) {
+  const row = await db.prepare('SELECT role FROM trip_members WHERE trip_id = ? AND user_id = ?').get(tripId, userId);
+  return !!row && (row.role === 'owner' || row.role === 'sub-admin');
+}
+
 function memberList(tripId) {
   return db
     .prepare(
@@ -67,7 +73,7 @@ router.get('/:id/members', async (req, res) => {
 });
 
 router.post('/:id/members', async (req, res) => {
-  if (!(await isMember(req.params.id, req.user.id))) return res.status(403).json({ error: 'Not a member' });
+  if (!(await isAdmin(req.params.id, req.user.id))) return res.status(403).json({ error: 'Only owner or sub-admin can add members' });
   const { email } = req.body || {};
   const user = await db.prepare('SELECT id FROM users WHERE email = ?').get((email || '').toLowerCase());
   if (!user) return res.status(404).json({ error: 'No user with that email' });
@@ -80,10 +86,24 @@ router.post('/:id/members', async (req, res) => {
 router.delete('/:id/members/:userId', async (req, res) => {
   const trip = await db.prepare('SELECT owner_id FROM trips WHERE id = ?').get(req.params.id);
   if (!trip) return res.status(404).json({ error: 'Not found' });
-  if (trip.owner_id !== req.user.id && req.user.id !== req.params.userId)
+  const admin = await isAdmin(req.params.id, req.user.id);
+  if (!admin && req.user.id !== req.params.userId)
     return res.status(403).json({ error: 'Not allowed' });
-  if (req.params.userId === trip.owner_id) return res.status(400).json({ error: 'Owner cannot leave' });
+  if (req.params.userId === trip.owner_id) return res.status(400).json({ error: 'Owner cannot be removed' });
   await db.prepare('DELETE FROM trip_members WHERE trip_id = ? AND user_id = ?').run(req.params.id, req.params.userId);
+  res.json({ members: await memberList(req.params.id) });
+});
+
+// Promote/demote a member to sub-admin (owner only)
+router.patch('/:id/members/:userId/role', async (req, res) => {
+  const trip = await db.prepare('SELECT owner_id FROM trips WHERE id = ?').get(req.params.id);
+  if (!trip) return res.status(404).json({ error: 'Not found' });
+  if (trip.owner_id !== req.user.id) return res.status(403).json({ error: 'Only the owner can change roles' });
+  if (req.params.userId === trip.owner_id) return res.status(400).json({ error: "Can't change the owner's role" });
+  const target = await db.prepare('SELECT 1 FROM trip_members WHERE trip_id = ? AND user_id = ?').get(req.params.id, req.params.userId);
+  if (!target) return res.status(404).json({ error: 'Not a member' });
+  const role = req.body?.role === 'sub-admin' ? 'sub-admin' : 'member';
+  await db.prepare('UPDATE trip_members SET role = ? WHERE trip_id = ? AND user_id = ?').run(role, req.params.id, req.params.userId);
   res.json({ members: await memberList(req.params.id) });
 });
 

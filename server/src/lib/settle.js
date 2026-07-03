@@ -1,6 +1,6 @@
 // Compute net balances per user and a minimal set of settlement transactions.
 // balances: { userId: netAmount }  (positive = is owed money, negative = owes money)
-export function computeBalances(expenses, shares) {
+export function computeBalances(expenses, shares, advances = [], advanceParts = []) {
   const bal = {};
   const add = (u, v) => { bal[u] = (bal[u] || 0) + v; };
 
@@ -9,6 +9,16 @@ export function computeBalances(expenses, shares) {
   }
   for (const s of shares) {
     add(s.user_id, -Number(s.share)); // each participant owes their share
+  }
+  // Advances: each participant handed `per_person` cash to the collector, so the
+  // contributor is credited and the collector holds (owes) that money until spent.
+  const byId = {};
+  for (const a of advances) byId[a.id] = a;
+  for (const p of advanceParts) {
+    const a = byId[p.advance_id];
+    if (!a) continue;
+    add(p.user_id, Number(a.per_person));
+    add(a.collector_id, -Number(a.per_person));
   }
   // round to paise
   for (const k of Object.keys(bal)) bal[k] = Math.round(bal[k] * 100) / 100;

@@ -173,6 +173,22 @@ CREATE TABLE IF NOT EXISTS otp_codes (
   created_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 CREATE INDEX IF NOT EXISTS otp_phone_purpose_idx ON otp_codes(phone, purpose);
+
+-- Advances / kitty: a collector gathers a fixed amount per person up front.
+CREATE TABLE IF NOT EXISTS advances (
+  id           TEXT PRIMARY KEY,
+  trip_id      TEXT NOT NULL REFERENCES trips(id) ON DELETE CASCADE,
+  collector_id TEXT NOT NULL REFERENCES users(id),
+  per_person   DOUBLE PRECISION NOT NULL,
+  category     TEXT NOT NULL DEFAULT 'general',
+  note         TEXT,
+  created_at   TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+CREATE TABLE IF NOT EXISTS advance_participants (
+  advance_id TEXT NOT NULL REFERENCES advances(id) ON DELETE CASCADE,
+  user_id    TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  PRIMARY KEY (advance_id, user_id)
+);
 `;
 
 async function init() {
