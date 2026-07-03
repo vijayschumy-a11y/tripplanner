@@ -71,7 +71,6 @@ export default function Members({ tripId, trip, members, onChange }) {
               <input className="input" value={email} onChange={(e) => setEmail(e.target.value)} placeholder="friend@email.com" onKeyDown={(e) => e.key === 'Enter' && add()} />
               <button className="btn" onClick={add} disabled={busy}>Add</button>
             </div>
-            <p className="muted" style={{ fontSize: 12, marginTop: 10 }}>Demo emails: arjun@demo.in, priya@demo.in, karthik@demo.in</p>
           </>
         ) : (
           <p className="muted" style={{ fontSize: 13 }}>Only the owner or a sub-admin can add or manage people.</p>

@@ -55,24 +55,11 @@ export default function Login() {
                 <button className="btn ghost sm" onClick={() => setScreen('reset')}>Forgot password?</button>
               )}
             </div>
-
-            {method === 'password' && (
-              <div style={{ textAlign: 'center', marginTop: 4 }}>
-                <button className="btn ghost sm" onClick={() => login && demoLogin(login)}>Use demo account</button>
-              </div>
-            )}
           </>
         )}
       </div>
     </div>
   );
-}
-
-async function demoLogin(login) {
-  try {
-    const d = await api.post('/auth/login', { email: 'arjun@demo.in', password: 'password' });
-    login(d.token, d.user);
-  } catch { /* ignore */ }
 }
 
 function Err({ children }) {
