@@ -72,7 +72,7 @@ router.post('/otp/request', async (req, res) => {
     .run(nanoid(), phone, bcrypt.hashSync(code, 8), purpose);
 
   try {
-    await sendOtp(phone, `${code} is your TripPlanner verification code. Valid for 10 minutes.`);
+    await sendOtp(phone, code, `${code} is your TripPlanner verification code. Valid for 10 minutes.`);
   } catch (e) {
     return res.status(502).json({ error: 'Could not send the code: ' + e.message });
   }
