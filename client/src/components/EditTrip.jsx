@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useRef, useState } from 'react';
 import { api } from '../lib/api.js';
 import { Modal, useToast } from '../lib/ui.jsx';
 
@@ -13,10 +13,29 @@ export default function EditTrip({ trip, onClose, onSaved }) {
     budget: trip.budget || '',
   });
   const [picked, setPicked] = useState(trip.lat != null ? { lat: trip.lat, lng: trip.lng } : null);
+  const [cover, setCover] = useState(trip.cover || null);
   const [results, setResults] = useState([]);
   const [searching, setSearching] = useState(false);
   const [busy, setBusy] = useState(false);
+  const fileRef = useRef(null);
   const set = (k) => (e) => setForm({ ...form, [k]: e.target.value });
+
+  const pickCover = (e) => {
+    const file = e.target.files?.[0]; e.target.value = '';
+    if (!file || !file.type.startsWith('image/')) return toast('Please choose an image');
+    const reader = new FileReader();
+    reader.onload = () => {
+      const img = new Image();
+      img.onload = () => {
+        const w = 640, h = Math.round((img.height / img.width) * 640);
+        const c = document.createElement('canvas'); c.width = w; c.height = Math.min(h, 420);
+        c.getContext('2d').drawImage(img, 0, 0, w, h);
+        setCover(c.toDataURL('image/jpeg', 0.75));
+      };
+      img.src = reader.result;
+    };
+    reader.readAsDataURL(file);
+  };
 
   const isMapLink = (s) => /^https?:\/\//i.test(s) && /(google\.[a-z.]+\/(maps|search)|maps\.google|goo\.gl|maps\.app\.goo\.gl|share\.google|g\.co)/i.test(s);
   const search = async () => {
@@ -57,6 +76,7 @@ export default function EditTrip({ trip, onClose, onSaved }) {
         start_date: form.start_date || null,
         end_date: form.end_date || null,
         budget: Number(form.budget) || 0,
+        cover,
       });
       onSaved(d.trip);
     } catch (e) { toast(e.message); setBusy(false); }
@@ -64,6 +84,17 @@ export default function EditTrip({ trip, onClose, onSaved }) {
 
   return (
     <Modal title="Edit trip" onClose={onClose}>
+      <div className="field">
+        <label>Cover photo</label>
+        <div className="trip-cover" style={cover ? { backgroundImage: `url(${cover})`, backgroundSize: 'cover', backgroundPosition: 'center' } : {}}>
+          {!cover && <span style={{ fontSize: 40 }}>🏔️</span>}
+        </div>
+        <div className="row" style={{ marginTop: 8 }}>
+          <button className="btn sm" onClick={() => fileRef.current?.click()}>📷 {cover ? 'Change photo' : 'Add photo'}</button>
+          {cover && <button className="btn ghost sm" onClick={() => setCover(null)}>Remove</button>}
+          <input ref={fileRef} type="file" accept="image/*" style={{ display: 'none' }} onChange={pickCover} />
+        </div>
+      </div>
       <div className="field"><label>Trip name</label>
         <input className="input" value={form.name} onChange={set('name')} /></div>
       <div className="field">

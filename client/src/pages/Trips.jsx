@@ -37,7 +37,9 @@ export default function Trips() {
         <div className="grid-trips">
           {trips.map((t, i) => (
             <div key={t.id} className="card trip-card" onClick={() => nav(`/trip/${t.id}`)}>
-              <div className="trip-cover">{EMOJIS[i % EMOJIS.length]}</div>
+              <div className="trip-cover" style={t.cover ? { backgroundImage: `url(${t.cover})`, backgroundSize: 'cover', backgroundPosition: 'center' } : {}}>
+                {!t.cover && EMOJIS[i % EMOJIS.length]}
+              </div>
               <div className="body">
                 <div className="between">
                   <strong>{t.name}</strong>

@@ -89,8 +89,13 @@ router.patch('/:id', async (req, res) => {
   const start_date = 'start_date' in b ? (b.start_date || null) : trip.start_date;
   const end_date = 'end_date' in b ? (b.end_date || null) : trip.end_date;
   const budget = 'budget' in b ? (Number(b.budget) || 0) : trip.budget;
-  await db.prepare('UPDATE trips SET name = ?, destination = ?, lat = ?, lng = ?, start_date = ?, end_date = ?, budget = ? WHERE id = ?')
-    .run(name, destination, lat, lng, start_date, end_date, budget, req.params.id);
+  let cover = trip.cover;
+  if ('cover' in b) {
+    cover = b.cover || null;
+    if (cover && (typeof cover !== 'string' || cover.length > 600000)) return res.status(400).json({ error: 'Cover image too large' });
+  }
+  await db.prepare('UPDATE trips SET name = ?, destination = ?, lat = ?, lng = ?, start_date = ?, end_date = ?, budget = ?, cover = ? WHERE id = ?')
+    .run(name, destination, lat, lng, start_date, end_date, budget, cover, req.params.id);
   res.json({ trip: await db.prepare('SELECT * FROM trips WHERE id = ?').get(req.params.id) });
 });
 

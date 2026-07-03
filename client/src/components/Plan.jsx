@@ -123,6 +123,8 @@ export default function Plan({ tripId, trip }) {
                   <div className="grow">
                     <strong style={{ fontSize: 14 }}>{it.title}</strong>
                     {it.note && <div className="muted" style={{ fontSize: 12 }}>{it.note}</div>}
+                    {it.veg && <div style={{ fontSize: 12, color: '#22c55e' }}>🟢 Veg: {it.veg}</div>}
+                    {it.nonveg && <div style={{ fontSize: 12, color: '#f87171' }}>🔴 Non-veg: {it.nonveg}</div>}
                   </div>
                   {it.map && <a className="btn sm" href={it.map} target="_blank" rel="noreferrer">↗</a>}
                 </div>

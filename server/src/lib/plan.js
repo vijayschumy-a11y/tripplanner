@@ -80,6 +80,67 @@ const fmt = (mins) => {
   const h = Math.floor(mins / 60) % 24, m = Math.round(mins % 60);
   return `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}`;
 };
+const cap = (s) => s.charAt(0).toUpperCase() + s.slice(1);
+
+function haversineM(aLat, aLng, bLat, bLng) {
+  const R = 6371000, toRad = (x) => (x * Math.PI) / 180;
+  const dLat = toRad(bLat - aLat), dLng = toRad(bLng - aLng);
+  const s = Math.sin(dLat / 2) ** 2 + Math.cos(toRad(aLat)) * Math.cos(toRad(bLat)) * Math.sin(dLng / 2) ** 2;
+  return Math.round(R * 2 * Math.atan2(Math.sqrt(s), Math.sqrt(1 - s)));
+}
+
+// Best-dish suggestions by cuisine — veg & non-veg
+const DISHES = {
+  south:   { veg: ['Masala Dosa', 'Ghee Pongal', 'Idli-Sambar'], nonveg: ['Chettinad Chicken', 'Fish Fry', 'Mutton Kola Urundai'] },
+  north:   { veg: ['Paneer Butter Masala', 'Dal Makhani', 'Chole Bhature'], nonveg: ['Butter Chicken', 'Rogan Josh', 'Seekh Kebab'] },
+  chinese: { veg: ['Veg Manchurian', 'Hakka Noodles'], nonveg: ['Chilli Chicken', 'Chicken Fried Rice'] },
+  biryani: { veg: ['Veg Dum Biryani'], nonveg: ['Chicken Biryani', 'Mutton Biryani'] },
+  seafood: { veg: ['Veg Thali'], nonveg: ['Grilled Fish', 'Prawn Masala', 'Crab Roast'] },
+  cafe:    { veg: ['Filter Coffee', 'Veg Sandwich', 'Cake'], nonveg: ['Chicken Sandwich'] },
+  fast:    { veg: ['Veg Burger', 'Fries'], nonveg: ['Chicken Burger', 'Chicken Wings'] },
+  pizza:   { veg: ['Margherita', 'Farmhouse'], nonveg: ['Chicken Pizza', 'Pepperoni'] },
+  default: { veg: ['Paneer Tikka', 'Veg Biryani', 'Masala Dosa'], nonveg: ['Chicken Biryani', 'Tandoori Chicken'] },
+};
+function suggestDishes(cuisine = '') {
+  const c = cuisine.toLowerCase();
+  if (c.includes('south') || c.includes('tamil') || c.includes('kerala') || c.includes('andhra')) return DISHES.south;
+  if (c.includes('north') || c.includes('punjabi') || c.includes('mughlai')) return DISHES.north;
+  if (c.includes('chinese') || c.includes('asian')) return DISHES.chinese;
+  if (c.includes('biryani')) return DISHES.biryani;
+  if (c.includes('seafood') || c.includes('fish')) return DISHES.seafood;
+  if (c.includes('pizza') || c.includes('italian')) return DISHES.pizza;
+  if (c.includes('burger') || c.includes('fast')) return DISHES.fast;
+  if (c.includes('coffee') || c.includes('cafe') || c.includes('bakery')) return DISHES.cafe;
+  return DISHES.default;
+}
+
+// Richer attraction search: sights, temples, historic spots, parks, beaches, viewpoints
+async function attractionsNear(lat, lng, radius) {
+  const q =
+    `[out:json][timeout:25];(` +
+    `node["tourism"~"attraction|viewpoint|museum|zoo|theme_park|gallery"]["name"](around:${radius},${lat},${lng});` +
+    `node["historic"]["name"](around:${radius},${lat},${lng});` +
+    `node["leisure"~"park|beach_resort|garden"]["name"](around:${radius},${lat},${lng});` +
+    `node["amenity"="place_of_worship"]["name"](around:${radius},${lat},${lng});` +
+    `node["natural"~"beach|peak"]["name"](around:${radius},${lat},${lng});` +
+    `);out body 60;`;
+  const res = await fetch('https://overpass-api.de/api/interpreter', {
+    method: 'POST', headers: { 'Content-Type': 'application/x-www-form-urlencoded', 'User-Agent': UA },
+    body: 'data=' + encodeURIComponent(q),
+  });
+  if (!res.ok) throw new Error('Overpass ' + res.status);
+  const data = await res.json();
+  const seen = new Set();
+  return (data.elements || [])
+    .filter((e) => e.lat && e.lon && e.tags?.name)
+    .map((e) => {
+      const t = e.tags;
+      const type = t.tourism || t.historic || t.leisure || (t.amenity === 'place_of_worship' ? 'temple / church' : t.natural) || 'sight';
+      return { name: t.name, lat: e.lat, lng: e.lon, type: String(type).replace(/_/g, ' '), distance: haversineM(lat, lng, e.lat, e.lon) };
+    })
+    .filter((a) => { const k = a.name.toLowerCase(); if (seen.has(k)) return false; seen.add(k); return true; })
+    .sort((a, b) => a.distance - b.distance);
+}
 
 export async function generatePlan({ destLat, destLng, destName, days, startName, startLat, startLng }) {
   days = Math.max(1, Math.min(Number(days) || 2, 7));
@@ -87,18 +148,30 @@ export async function generatePlan({ destLat, destLng, destName, days, startName
   let attractionsRaw = [], food = [];
   try {
     [attractionsRaw, food] = await Promise.all([
-      nearby('attraction', destLat, destLng, 15000),
-      nearby('food', destLat, destLng, 8000),
+      attractionsNear(destLat, destLng, 15000),
+      nearby('food', destLat, destLng, 9000),
     ]);
   } catch { /* fall through with whatever we got */ }
+
+  // de-duplicate food by name so meals don't repeat the same place
+  const fseen = new Set();
+  food = food.filter((f) => { const k = f.name.toLowerCase(); if (fseen.has(k)) return false; fseen.add(k); return true; });
 
   const attractions = attractionsRaw.slice(0, days * 3);
   const startPt = startLat && startLng ? { lat: startLat, lng: startLng } : { lat: destLat, lng: destLng };
   const ordered = nearestNeighbour(attractions, startPt.lat, startPt.lng);
   const perDay = Math.max(1, Math.ceil(ordered.length / days));
 
-  const nearestFood = (lat, lng) =>
-    food.length ? food.reduce((a, b) => (dist(lat, lng, a.lat, a.lng) < dist(lat, lng, b.lat, b.lng) ? a : b)) : null;
+  // pick the nearest UNUSED restaurant each time (different for each meal)
+  const used = new Set();
+  const nearestFood = (lat, lng) => {
+    const pool = food.filter((f) => !used.has(f.name));
+    const src = pool.length ? pool : food;
+    if (!src.length) return null;
+    const pick = src.reduce((a, b) => (dist(lat, lng, a.lat, a.lng) < dist(lat, lng, b.lat, b.lng) ? a : b));
+    used.add(pick.name);
+    return pick;
+  };
   const dirLink = (lat, lng) => `https://www.google.com/maps/dir/?api=1&destination=${lat},${lng}`;
 
   const plan = [];
@@ -106,34 +179,40 @@ export async function generatePlan({ destLat, destLng, destName, days, startName
     const dayAttractions = ordered.slice(di * perDay, (di + 1) * perDay);
     const items = [];
     let clock = 8 * 60;
-    const push = (type, title, lat, lng, note) =>
-      items.push({ time: fmt(clock), type, title, lat: lat ?? null, lng: lng ?? null, note: note ?? null, map: lat ? dirLink(lat, lng) : null });
+    const push = (o) => items.push({ time: fmt(clock), map: o.lat ? dirLink(o.lat, o.lng) : null, ...o });
+    const meal = (type, place) => {
+      if (!place) return false;
+      const d = suggestDishes(place.cuisine);
+      push({
+        type, title: `${cap(type)} — ${place.name}`, lat: place.lat, lng: place.lng,
+        note: place.cuisine ? place.cuisine.replace(/_/g, ' / ').replace(/;/g, ', ') : null,
+        veg: d.veg.slice(0, 2).join(', '), nonveg: d.nonveg.slice(0, 2).join(', '),
+      });
+      return true;
+    };
 
     if (di === 0 && startName) {
-      push('start', `Start from ${startName}`, startLat, startLng, 'Begin the journey');
+      push({ type: 'start', title: `Start from ${startName}`, lat: startLat, lng: startLng, note: 'Begin the journey' });
       clock += 120;
-      push('drive', `Arrive in ${destName}`, destLat, destLng, 'Freshen up / check in');
+      push({ type: 'drive', title: `Arrive in ${destName}`, lat: destLat, lng: destLng, note: 'Freshen up / check in' });
       clock += 30;
     }
 
     const base0 = dayAttractions[0] || { lat: destLat, lng: destLng };
-    const bf = nearestFood(base0.lat, base0.lng);
-    if (bf) { push('breakfast', `Breakfast — ${bf.name}`, bf.lat, bf.lng, bf.cuisine); clock += 60; }
+    if (meal('breakfast', nearestFood(base0.lat, base0.lng))) clock += 60;
 
     const half = Math.ceil(dayAttractions.length / 2);
-    dayAttractions.slice(0, half).forEach((a) => { push('visit', a.name, a.lat, a.lng, a.cuisine || 'Sightseeing'); clock += 90; });
+    dayAttractions.slice(0, half).forEach((a) => { push({ type: 'visit', title: a.name, lat: a.lat, lng: a.lng, note: `${a.type} · ${a.distance} m from centre` }); clock += 90; });
 
     clock = Math.max(clock, 13 * 60);
     const lb = dayAttractions[half - 1] || base0;
-    const lunch = nearestFood(lb.lat, lb.lng);
-    if (lunch) { push('lunch', `Lunch — ${lunch.name}`, lunch.lat, lunch.lng, lunch.cuisine); clock += 75; }
+    if (meal('lunch', nearestFood(lb.lat, lb.lng))) clock += 75;
 
-    dayAttractions.slice(half).forEach((a) => { push('visit', a.name, a.lat, a.lng, 'Sightseeing'); clock += 90; });
+    dayAttractions.slice(half).forEach((a) => { push({ type: 'visit', title: a.name, lat: a.lat, lng: a.lng, note: a.type }); clock += 90; });
 
     clock = Math.max(clock, 19.5 * 60);
     const db = dayAttractions[dayAttractions.length - 1] || base0;
-    const dinner = nearestFood(db.lat, db.lng);
-    if (dinner) push('dinner', `Dinner — ${dinner.name}`, dinner.lat, dinner.lng, dinner.cuisine);
+    meal('dinner', nearestFood(db.lat, db.lng));
 
     plan.push({ dayIndex: di, visitCount: dayAttractions.length, items });
   }
