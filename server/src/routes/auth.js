@@ -3,7 +3,7 @@ import bcrypt from 'bcryptjs';
 import { nanoid } from 'nanoid';
 import db from '../db.js';
 import { signToken, requireAuth } from '../lib/auth.js';
-import { sendSms, isDemo } from '../lib/sms.js';
+import { sendOtp, isDemo } from '../lib/sms.js';
 
 const router = Router();
 
@@ -72,7 +72,7 @@ router.post('/otp/request', async (req, res) => {
     .run(nanoid(), phone, bcrypt.hashSync(code, 8), purpose);
 
   try {
-    await sendSms(phone, `${code} is your TripPlanner verification code. Valid for 10 minutes.`);
+    await sendOtp(phone, `${code} is your TripPlanner verification code. Valid for 10 minutes.`);
   } catch (e) {
     return res.status(502).json({ error: 'Could not send the code: ' + e.message });
   }
