@@ -93,7 +93,11 @@ export default function Plan({ tripId, trip }) {
               </div>
             ))}
           </div>
-          <p className="muted" style={{ fontSize: 12, marginTop: 8 }}>Forecast is available up to ~16 days ahead of the date.</p>
+          <p className="muted" style={{ fontSize: 12, marginTop: 8 }}>
+            {weather.some((w) => w.seasonal)
+              ? '≈ Typical weather (last year, same dates) — a live forecast appears within ~16 days of travel.'
+              : 'Live forecast for your travel dates.'}
+          </p>
         </div>
       )}
 

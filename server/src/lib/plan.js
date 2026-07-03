@@ -21,22 +21,45 @@ function dist(aLat, aLng, bLat, bLng) {
   return dLat * dLat + dLng * dLng; // squared euclidean is fine for ordering
 }
 
+const DAILY = 'weather_code,temperature_2m_max,temperature_2m_min,precipitation_probability_max';
+const shiftYear = (s, n) => { const d = new Date(s); d.setFullYear(d.getFullYear() + n); return d.toISOString().slice(0, 10); };
+const addDaysStr = (s, n) => { const d = new Date(s); d.setDate(d.getDate() + n); return d.toISOString().slice(0, 10); };
+
+async function getJson(url) {
+  const r = await fetch(url, { headers: { 'User-Agent': UA } });
+  const j = await r.json();
+  if (!r.ok || j.error) throw new Error(j.reason || 'weather error');
+  return j;
+}
+
+// Live forecast within ~16 days; otherwise a seasonal estimate from last year's
+// archive for the same dates. Returns [] only if both providers fail.
 export async function weather(lat, lng, start, end) {
-  const range = start && end ? `&start_date=${start}&end_date=${end}` : '&forecast_days=7';
-  const url =
-    `https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lng}` +
-    `&daily=weather_code,temperature_2m_max,temperature_2m_min,precipitation_probability_max&timezone=auto${range}`;
-  const res = await fetch(url, { headers: { 'User-Agent': UA } });
-  if (!res.ok) throw new Error('weather provider error');
-  const d = await res.json();
-  const day = d.daily || {};
-  return (day.time || []).map((date, i) => ({
-    date,
-    ...describe(day.weather_code[i]),
-    tmax: Math.round(day.temperature_2m_max[i]),
-    tmin: Math.round(day.temperature_2m_min[i]),
-    rain: day.precipitation_probability_max?.[i] ?? null,
-  }));
+  try {
+    const range = start && end ? `&start_date=${start}&end_date=${end}` : '&forecast_days=7';
+    const j = await getJson(`https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lng}&daily=${DAILY}&timezone=auto${range}`);
+    const day = j.daily || {};
+    return (day.time || []).map((date, i) => ({
+      date, ...describe(day.weather_code[i]),
+      tmax: Math.round(day.temperature_2m_max[i]), tmin: Math.round(day.temperature_2m_min[i]),
+      rain: day.precipitation_probability_max?.[i] ?? null,
+    }));
+  } catch {
+    if (!start) return [];
+    try {
+      const j = await getJson(
+        `https://archive-api.open-meteo.com/v1/archive?latitude=${lat}&longitude=${lng}` +
+        `&start_date=${shiftYear(start, -1)}&end_date=${shiftYear(end || start, -1)}` +
+        `&daily=weather_code,temperature_2m_max,temperature_2m_min&timezone=auto`
+      );
+      const day = j.daily || {};
+      return (day.time || []).map((_, i) => ({
+        date: addDaysStr(start, i), ...describe(day.weather_code[i]),
+        tmax: Math.round(day.temperature_2m_max[i]), tmin: Math.round(day.temperature_2m_min[i]),
+        rain: null, seasonal: true,
+      }));
+    } catch { return []; }
+  }
 }
 
 function nearestNeighbour(items, lat, lng) {
