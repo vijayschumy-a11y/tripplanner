@@ -1,6 +1,24 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { api } from '../lib/api.js';
 import { useAuth } from '../App.jsx';
+
+// Countdown hook for resend buttons (seconds remaining).
+function useCooldown() {
+  const [left, setLeft] = useState(0);
+  const ref = useRef(null);
+  const start = (s) => {
+    setLeft(s);
+    clearInterval(ref.current);
+    ref.current = setInterval(() => {
+      setLeft((v) => {
+        if (v <= 1) { clearInterval(ref.current); return 0; }
+        return v - 1;
+      });
+    }, 1000);
+  };
+  useEffect(() => () => clearInterval(ref.current), []);
+  return [left, start];
+}
 
 export default function Login() {
   const { login } = useAuth();
@@ -114,17 +132,24 @@ function PhoneForm({ isRegister, onDone }) {
   const [demoCode, setDemoCode] = useState('');
   const [err, setErr] = useState('');
   const [busy, setBusy] = useState(false);
+  const [cooldown, startCooldown] = useCooldown();
   const purpose = isRegister ? 'register' : 'login';
 
   const request = async (e) => {
     e?.preventDefault();
     if (isRegister && !name.trim()) return setErr('Enter your name');
+    if (cooldown > 0) return;
     setErr(''); setBusy(true);
     try {
       const d = await api.post('/auth/otp/request', { phone, purpose });
       if (d.demo && d.code) { setDemoCode(d.code); setCode(d.code); }
       setStep('code');
-    } catch (e) { setErr(e.message); } finally { setBusy(false); }
+      startCooldown(30);
+    } catch (e) {
+      setErr(e.message);
+      const m = /wait (\d+)s/.exec(e.message);
+      if (m) startCooldown(Number(m[1]));
+    } finally { setBusy(false); }
   };
 
   const verify = async (e) => {
@@ -159,7 +184,9 @@ function PhoneForm({ isRegister, onDone }) {
         <input className="input" inputMode="numeric" value={code} onChange={(e) => setCode(e.target.value)} placeholder="______" maxLength={6} required style={{ letterSpacing: 6, fontSize: 18, textAlign: 'center' }} /></div>
       <Err>{err}</Err>
       <button className="btn primary" style={{ width: '100%' }} disabled={busy}>{busy ? 'Verifying…' : isRegister ? 'Verify & create account' : 'Verify & sign in'}</button>
-      <button type="button" className="btn ghost sm" style={{ width: '100%', marginTop: 8 }} onClick={request} disabled={busy}>Resend code</button>
+      <button type="button" className="btn ghost sm" style={{ width: '100%', marginTop: 8 }} onClick={request} disabled={busy || cooldown > 0}>
+        {cooldown > 0 ? `Resend code in ${cooldown}s` : 'Resend code'}
+      </button>
     </form>
   );
 }
@@ -173,15 +200,22 @@ function ResetForm({ onDone, onBack }) {
   const [demoCode, setDemoCode] = useState('');
   const [err, setErr] = useState('');
   const [busy, setBusy] = useState(false);
+  const [cooldown, startCooldown] = useCooldown();
 
   const request = async (e) => {
     e?.preventDefault();
+    if (cooldown > 0) return;
     setErr(''); setBusy(true);
     try {
       const d = await api.post('/auth/otp/request', { phone, purpose: 'reset' });
       if (d.demo && d.code) { setDemoCode(d.code); setCode(d.code); }
       setStep('code');
-    } catch (e) { setErr(e.message); } finally { setBusy(false); }
+      startCooldown(30);
+    } catch (e) {
+      setErr(e.message);
+      const m = /wait (\d+)s/.exec(e.message);
+      if (m) startCooldown(Number(m[1]));
+    } finally { setBusy(false); }
   };
 
   const verify = async (e) => {
@@ -217,6 +251,9 @@ function ResetForm({ onDone, onBack }) {
             <input className="input" type="password" value={password} onChange={(e) => setPassword(e.target.value)} placeholder="New password" required /></div>
           <Err>{err}</Err>
           <button className="btn primary" style={{ width: '100%' }} disabled={busy}>{busy ? 'Saving…' : 'Set new password & sign in'}</button>
+          <button type="button" className="btn ghost sm" style={{ width: '100%', marginTop: 8 }} onClick={request} disabled={busy || cooldown > 0}>
+            {cooldown > 0 ? `Resend code in ${cooldown}s` : 'Resend code'}
+          </button>
         </form>
       )}
     </div>
