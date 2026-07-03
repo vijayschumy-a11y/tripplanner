@@ -146,6 +146,69 @@ router.delete('/:id/places/:placeId', async (req, res) => {
   res.json({ ok: true });
 });
 
+// ---- Checklists (personal = private to the user, team = shared) ----
+router.get('/:id/checklist', async (req, res) => {
+  if (!(await isMember(req.params.id, req.user.id))) return res.status(403).json({ error: 'Not a member' });
+  const personal = await db
+    .prepare(
+      `SELECT * FROM checklist_items
+       WHERE trip_id = ? AND scope = 'personal' AND owner_id = ?
+       ORDER BY done, sort, created_at`
+    )
+    .all(req.params.id, req.user.id);
+  const team = await db
+    .prepare(
+      `SELECT c.*, u.name AS owner_name, du.name AS done_by_name
+       FROM checklist_items c
+       JOIN users u ON u.id = c.owner_id
+       LEFT JOIN users du ON du.id = c.done_by
+       WHERE c.trip_id = ? AND c.scope = 'team'
+       ORDER BY c.done, c.sort, c.created_at`
+    )
+    .all(req.params.id);
+  res.json({ personal, team });
+});
+
+router.post('/:id/checklist', async (req, res) => {
+  if (!(await isMember(req.params.id, req.user.id))) return res.status(403).json({ error: 'Not a member' });
+  const { text, scope } = req.body || {};
+  if (!text || !text.trim()) return res.status(400).json({ error: 'text required' });
+  const s = scope === 'team' ? 'team' : 'personal';
+  const id = nanoid();
+  const max = await db
+    .prepare('SELECT COALESCE(MAX(sort), 0) AS m FROM checklist_items WHERE trip_id = ? AND scope = ?')
+    .get(req.params.id, s);
+  await db
+    .prepare('INSERT INTO checklist_items (id, trip_id, scope, owner_id, text, sort) VALUES (?, ?, ?, ?, ?, ?)')
+    .run(id, req.params.id, s, req.user.id, text.trim(), Number(max.m) + 1);
+  res.json({ item: await db.prepare('SELECT * FROM checklist_items WHERE id = ?').get(id) });
+});
+
+router.patch('/:id/checklist/:itemId', async (req, res) => {
+  if (!(await isMember(req.params.id, req.user.id))) return res.status(403).json({ error: 'Not a member' });
+  const cur = await db.prepare('SELECT * FROM checklist_items WHERE id = ? AND trip_id = ?').get(req.params.itemId, req.params.id);
+  if (!cur) return res.status(404).json({ error: 'Not found' });
+  // Only the owner may modify a personal item; any member may tick a team item.
+  if (cur.scope === 'personal' && cur.owner_id !== req.user.id) return res.status(403).json({ error: 'Not your item' });
+  const { done, text } = req.body || {};
+  const newDone = done == null ? cur.done : done ? 1 : 0;
+  const doneBy = cur.scope === 'team' ? (newDone ? req.user.id : null) : null;
+  const newText = text && text.trim() ? text.trim() : cur.text;
+  await db
+    .prepare('UPDATE checklist_items SET done = ?, done_by = ?, text = ? WHERE id = ?')
+    .run(newDone, doneBy, newText, cur.id);
+  res.json({ item: await db.prepare('SELECT * FROM checklist_items WHERE id = ?').get(cur.id) });
+});
+
+router.delete('/:id/checklist/:itemId', async (req, res) => {
+  if (!(await isMember(req.params.id, req.user.id))) return res.status(403).json({ error: 'Not a member' });
+  const cur = await db.prepare('SELECT * FROM checklist_items WHERE id = ? AND trip_id = ?').get(req.params.itemId, req.params.id);
+  if (!cur) return res.json({ ok: true });
+  if (cur.scope === 'personal' && cur.owner_id !== req.user.id) return res.status(403).json({ error: 'Not your item' });
+  await db.prepare('DELETE FROM checklist_items WHERE id = ?').run(cur.id);
+  res.json({ ok: true });
+});
+
 // ---- Live locations (latest snapshot; realtime via socket.io) ----
 router.get('/:id/locations', async (req, res) => {
   if (!(await isMember(req.params.id, req.user.id))) return res.status(403).json({ error: 'Not a member' });

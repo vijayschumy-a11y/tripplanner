@@ -145,6 +145,17 @@ CREATE TABLE IF NOT EXISTS locations (
   updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
   PRIMARY KEY (trip_id, user_id)
 );
+CREATE TABLE IF NOT EXISTS checklist_items (
+  id         TEXT PRIMARY KEY,
+  trip_id    TEXT NOT NULL REFERENCES trips(id) ON DELETE CASCADE,
+  scope      TEXT NOT NULL DEFAULT 'personal',  -- 'personal' (private) | 'team' (shared)
+  owner_id   TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  text       TEXT NOT NULL,
+  done       INTEGER NOT NULL DEFAULT 0,
+  done_by    TEXT REFERENCES users(id),
+  sort       INTEGER NOT NULL DEFAULT 0,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
 `;
 
 async function init() {

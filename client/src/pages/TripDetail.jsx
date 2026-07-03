@@ -7,12 +7,14 @@ import Expenses from '../components/Expenses.jsx';
 import Explore from '../components/Explore.jsx';
 import Itinerary from '../components/Itinerary.jsx';
 import LiveMap from '../components/LiveMap.jsx';
+import Checklist from '../components/Checklist.jsx';
 
 const TABS = [
   ['overview', 'Overview', '🏠'],
   ['expenses', 'Split', '💸'],
   ['explore', 'Explore', '🗺️'],
   ['itinerary', 'Itinerary', '📅'],
+  ['checklist', 'Checklist', '✅'],
   ['live', 'Live', '📡'],
   ['members', 'People', '👥'],
 ];
@@ -55,6 +57,7 @@ export default function TripDetail() {
       {tab === 'expenses' && <Expenses tripId={id} members={members} />}
       {tab === 'explore' && <Explore trip={trip} />}
       {tab === 'itinerary' && <Itinerary tripId={id} trip={trip} />}
+      {tab === 'checklist' && <Checklist tripId={id} />}
       {tab === 'live' && <LiveMap trip={trip} />}
       {tab === 'members' && <Members tripId={id} trip={trip} members={members} onChange={load} />}
     </div>
@@ -99,6 +102,7 @@ function Overview({ trip, members, onGo }) {
           <Action icon="⛽" label="Petrol bunk" onClick={() => onGo('explore')} />
           <Action icon="📡" label="Share location" onClick={() => onGo('live')} />
           <Action icon="📅" label="Plan day" onClick={() => onGo('itinerary')} />
+          <Action icon="✅" label="Checklists" onClick={() => onGo('checklist')} />
         </div>
       </div>
     </div>
