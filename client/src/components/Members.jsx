@@ -11,9 +11,19 @@ export default function Members({ tripId, trip, members, onChange }) {
   const [email, setEmail] = useState('');
   const [busy, setBusy] = useState(false);
 
+  const [friendPhone, setFriendPhone] = useState('');
   const isOwner = trip.owner_id === user.id;
   const myRole = members.find((m) => m.id === user.id)?.role;
   const isAdmin = myRole === 'owner' || myRole === 'sub-admin';
+
+  const inviteLink = `${window.location.origin}/join/${trip.invite_code}`;
+  const inviteMsg = `You're invited to "${trip.name}" on TripPlanner 🧭\nTap to join: ${inviteLink}`;
+  const shareWhatsApp = (to) =>
+    window.open(`https://wa.me/${(to || '').replace(/\D/g, '')}?text=${encodeURIComponent(inviteMsg)}`, '_blank');
+  const copyLink = async () => {
+    try { await navigator.clipboard.writeText(inviteLink); toast('Invite link copied'); }
+    catch { toast('Copy failed — long-press the link'); }
+  };
 
   const add = async () => {
     if (!email) return;
@@ -46,10 +56,20 @@ export default function Members({ tripId, trip, members, onChange }) {
         <h3 className="section-title">Invite someone</h3>
         {isAdmin ? (
           <>
-            <p className="muted" style={{ fontSize: 13, marginTop: 0 }}>Add a travel buddy by their registered email. They'll see the trip, expenses and live map.</p>
+            <p className="muted" style={{ fontSize: 13, marginTop: 0 }}>Send an invite link — friends can join even before they've signed up.</p>
+            <button className="btn primary" style={{ width: '100%', background: '#25D366', borderColor: 'transparent' }} onClick={() => shareWhatsApp()}>
+              💬 Invite on WhatsApp
+            </button>
+            <div className="row" style={{ marginTop: 8 }}>
+              <input className="input" type="tel" value={friendPhone} onChange={(e) => setFriendPhone(e.target.value)} placeholder="Friend's number (optional)" />
+              <button className="btn" onClick={() => shareWhatsApp(friendPhone)} disabled={!friendPhone.trim()}>Send</button>
+            </div>
+            <button className="btn ghost sm" style={{ width: '100%', marginTop: 8 }} onClick={copyLink}>🔗 Copy invite link</button>
+
+            <h3 className="section-title" style={{ marginTop: 18 }}>Or add a registered user</h3>
             <div className="row">
               <input className="input" value={email} onChange={(e) => setEmail(e.target.value)} placeholder="friend@email.com" onKeyDown={(e) => e.key === 'Enter' && add()} />
-              <button className="btn primary" onClick={add} disabled={busy}>Add</button>
+              <button className="btn" onClick={add} disabled={busy}>Add</button>
             </div>
             <p className="muted" style={{ fontSize: 12, marginTop: 10 }}>Demo emails: arjun@demo.in, priya@demo.in, karthik@demo.in</p>
           </>

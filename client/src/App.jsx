@@ -6,9 +6,16 @@ import { Avatar, ToastProvider } from './lib/ui.jsx';
 import Login from './pages/Login.jsx';
 import Trips from './pages/Trips.jsx';
 import TripDetail from './pages/TripDetail.jsx';
+import JoinTrip from './pages/JoinTrip.jsx';
 
 const AuthCtx = createContext(null);
 export const useAuth = () => useContext(AuthCtx);
+
+// After login, resume a pending invite-join if there is one.
+function afterLoginPath() {
+  const code = localStorage.getItem('tp_join');
+  return code ? `/join/${code}` : '/';
+}
 
 export default function App() {
   const [user, setUser] = useState(null);
@@ -38,7 +45,8 @@ export default function App() {
       <ToastProvider>
         {user && <TopBar />}
         <Routes>
-          <Route path="/login" element={user ? <Navigate to="/" /> : <Login />} />
+          <Route path="/login" element={user ? <Navigate to={afterLoginPath()} /> : <Login />} />
+          <Route path="/join/:code" element={<JoinTrip />} />
           <Route path="/" element={user ? <Trips /> : <Navigate to="/login" />} />
           <Route path="/trip/:id" element={user ? <TripDetail /> : <Navigate to="/login" />} />
           <Route path="*" element={<Navigate to="/" />} />

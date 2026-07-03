@@ -189,6 +189,11 @@ CREATE TABLE IF NOT EXISTS advance_participants (
   user_id    TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
   PRIMARY KEY (advance_id, user_id)
 );
+
+-- Shareable invite links (WhatsApp / copy link)
+ALTER TABLE trips ADD COLUMN IF NOT EXISTS invite_code TEXT;
+UPDATE trips SET invite_code = substr(md5(random()::text || id), 1, 10) WHERE invite_code IS NULL;
+CREATE UNIQUE INDEX IF NOT EXISTS trips_invite_code_uidx ON trips(invite_code) WHERE invite_code IS NOT NULL;
 `;
 
 async function init() {

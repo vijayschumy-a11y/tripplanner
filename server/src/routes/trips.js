@@ -4,7 +4,24 @@ import db from '../db.js';
 import { requireAuth } from '../lib/auth.js';
 
 const router = Router();
+
+// Public: minimal trip info for an invite link (no auth needed to preview)
+router.get('/invite/:code', async (req, res) => {
+  const trip = await db.prepare('SELECT id, name, destination FROM trips WHERE invite_code = ?').get(req.params.code);
+  if (!trip) return res.status(404).json({ error: 'Invite link is invalid or expired' });
+  res.json({ trip });
+});
+
 router.use(requireAuth);
+
+// Join a trip via its invite code
+router.post('/join/:code', async (req, res) => {
+  const trip = await db.prepare('SELECT * FROM trips WHERE invite_code = ?').get(req.params.code);
+  if (!trip) return res.status(404).json({ error: 'Invite link is invalid or expired' });
+  await db.prepare('INSERT INTO trip_members (trip_id, user_id, role) VALUES (?, ?, ?) ON CONFLICT DO NOTHING')
+    .run(trip.id, req.user.id, 'member');
+  res.json({ trip });
+});
 
 // Guard: user must be a member of the trip
 function isMember(tripId, userId) {
@@ -43,10 +60,11 @@ router.post('/', async (req, res) => {
   const { name, destination, lat, lng, start_date, end_date, budget, cover } = req.body || {};
   if (!name || !destination) return res.status(400).json({ error: 'name and destination required' });
   const id = nanoid();
+  const inviteCode = nanoid(10);
   await db.prepare(
-    `INSERT INTO trips (id, name, destination, lat, lng, start_date, end_date, budget, cover, owner_id)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
-  ).run(id, name, destination, lat ?? null, lng ?? null, start_date ?? null, end_date ?? null, budget ?? 0, cover ?? null, req.user.id);
+    `INSERT INTO trips (id, name, destination, lat, lng, start_date, end_date, budget, cover, owner_id, invite_code)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+  ).run(id, name, destination, lat ?? null, lng ?? null, start_date ?? null, end_date ?? null, budget ?? 0, cover ?? null, req.user.id, inviteCode);
   await db.prepare('INSERT INTO trip_members (trip_id, user_id, role) VALUES (?, ?, ?)').run(id, req.user.id, 'owner');
   res.json({ trip: await db.prepare('SELECT * FROM trips WHERE id = ?').get(id) });
 });
