@@ -4,6 +4,8 @@ import { Avatar, Modal, useToast, rupee, CATEGORY_ICON } from '../lib/ui.jsx';
 import { useAuth } from '../App.jsx';
 
 const CATS = ['general', 'food', 'transport', 'stay', 'shopping', 'activity', 'fuel'];
+const upiLink = (to, amount) =>
+  `upi://pay?pa=${encodeURIComponent(to.upi_id)}&pn=${encodeURIComponent(to.name)}&am=${Math.round(amount * 100) / 100}&cu=INR&tn=${encodeURIComponent('TripPlanner settle-up')}`;
 
 export default function Expenses({ tripId, members }) {
   const { user } = useAuth();
@@ -56,10 +58,13 @@ export default function Expenses({ tripId, members }) {
                   <h3 className="section-title">Who pays whom</h3>
                   {summary.settlements.map((s, i) => (
                     <div key={i} className="list-item" style={{ fontSize: 14 }}>
-                      <strong>{s.from.name}</strong> → <strong>{s.to.name}</strong>
-                      <span className="grow" style={{ textAlign: 'right' }}>
-                        <span className="balance-neg">{rupee(s.amount)}</span>
-                      </span>
+                      <div className="grow">
+                        <strong>{s.from.name}</strong> → <strong>{s.to.name}</strong>
+                        <span className="balance-neg" style={{ marginLeft: 8 }}>{rupee(s.amount)}</span>
+                      </div>
+                      {s.from.id === user.id && s.to.upi_id && (
+                        <a className="btn primary sm" href={upiLink(s.to, s.amount)}>Pay ₹{Math.round(s.amount)}</a>
+                      )}
                     </div>
                   ))}
                 </>

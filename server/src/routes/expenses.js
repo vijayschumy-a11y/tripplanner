@@ -3,6 +3,7 @@ import { nanoid } from 'nanoid';
 import db from '../db.js';
 import { requireAuth } from '../lib/auth.js';
 import { computeBalances, settlements } from '../lib/settle.js';
+import { pushToUsers } from '../lib/push.js';
 
 const router = Router();
 router.use(requireAuth);
@@ -71,6 +72,9 @@ router.post('/trip/:tripId', async (req, res) => {
   } catch {
     return res.status(500).json({ error: 'Could not save expense' });
   }
+
+  const others = members.filter((m) => m !== req.user.id);
+  pushToUsers(others, { title: '💸 New expense', body: `${title} · ${Math.round(amount)} — added by ${req.user.name}`, url: `/trip/${tripId}`, tag: 'exp-' + tripId });
 
   res.json({ expense: await db.prepare('SELECT * FROM expenses WHERE id = ?').get(id) });
 });
@@ -142,7 +146,7 @@ router.get('/trip/:tripId/summary', async (req, res) => {
     .prepare('SELECT p.advance_id, p.user_id FROM advance_participants p JOIN advances a ON a.id = p.advance_id WHERE a.trip_id = ?')
     .all(tripId);
   const members = await db
-    .prepare(`SELECT u.id, u.name, u.avatar_color FROM trip_members m JOIN users u ON u.id = m.user_id WHERE m.trip_id = ?`)
+    .prepare(`SELECT u.id, u.name, u.avatar_color, u.avatar, u.upi_id FROM trip_members m JOIN users u ON u.id = m.user_id WHERE m.trip_id = ?`)
     .all(tripId);
 
   const balances = computeBalances(expenses, shares, advances, advanceParts);

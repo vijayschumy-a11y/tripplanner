@@ -197,6 +197,18 @@ CREATE UNIQUE INDEX IF NOT EXISTS trips_invite_code_uidx ON trips(invite_code) W
 
 -- Profile photo (small base64 data URL)
 ALTER TABLE users ADD COLUMN IF NOT EXISTS avatar TEXT;
+-- UPI id for one-tap settle-up
+ALTER TABLE users ADD COLUMN IF NOT EXISTS upi_id TEXT;
+
+-- Web push subscriptions (a user can have several devices)
+CREATE TABLE IF NOT EXISTS push_subscriptions (
+  endpoint   TEXT PRIMARY KEY,
+  user_id    TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  p256dh     TEXT NOT NULL,
+  auth       TEXT NOT NULL,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS push_sub_user_idx ON push_subscriptions(user_id);
 
 -- Shared meeting point (rendezvous) for the trip
 ALTER TABLE trips ADD COLUMN IF NOT EXISTS meet_lat DOUBLE PRECISION;

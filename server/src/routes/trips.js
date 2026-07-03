@@ -2,6 +2,7 @@ import { Router } from 'express';
 import { nanoid } from 'nanoid';
 import db from '../db.js';
 import { requireAuth } from '../lib/auth.js';
+import { pushToUsers } from '../lib/push.js';
 
 const router = Router();
 
@@ -20,6 +21,8 @@ router.post('/join/:code', async (req, res) => {
   if (!trip) return res.status(404).json({ error: 'Invite link is invalid or expired' });
   await db.prepare('INSERT INTO trip_members (trip_id, user_id, role) VALUES (?, ?, ?) ON CONFLICT DO NOTHING')
     .run(trip.id, req.user.id, 'member');
+  const mem = await db.prepare('SELECT user_id FROM trip_members WHERE trip_id = ? AND user_id <> ?').all(trip.id, req.user.id);
+  pushToUsers(mem.map((m) => m.user_id), { title: '👋 New traveller', body: `${req.user.name} joined "${trip.name}"`, url: `/trip/${trip.id}`, tag: 'join-' + trip.id });
   res.json({ trip });
 });
 

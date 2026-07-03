@@ -19,7 +19,7 @@ const normalizePhone = (p) => {
   return d;
 };
 const genCode = () => String(Math.floor(100000 + Math.random() * 900000));
-const publicUser = (u) => ({ id: u.id, name: u.name, email: u.email, phone: u.phone, avatar_color: u.avatar_color, avatar: u.avatar });
+const publicUser = (u) => ({ id: u.id, name: u.name, email: u.email, phone: u.phone, avatar_color: u.avatar_color, avatar: u.avatar, upi_id: u.upi_id });
 
 // ---------- Email + password ----------
 router.post('/register', async (req, res) => {
@@ -142,11 +142,11 @@ router.post('/otp/verify', async (req, res) => {
 
 // ---------- Session / directory ----------
 router.get('/me', requireAuth, async (req, res) => {
-  const row = await db.prepare('SELECT id, name, email, phone, avatar_color, avatar FROM users WHERE id = ?').get(req.user.id);
+  const row = await db.prepare('SELECT id, name, email, phone, avatar_color, avatar, upi_id FROM users WHERE id = ?').get(req.user.id);
   res.json({ user: row });
 });
 
-// Update own profile: display name and/or photo (small base64 data URL)
+// Update own profile: display name, photo, and/or UPI id
 router.patch('/profile', requireAuth, async (req, res) => {
   const cur = await db.prepare('SELECT * FROM users WHERE id = ?').get(req.user.id);
   if (!cur) return res.status(404).json({ error: 'Not found' });
@@ -158,8 +158,13 @@ router.patch('/profile', requireAuth, async (req, res) => {
     if (avatar && (typeof avatar !== 'string' || avatar.length > 400000))
       return res.status(400).json({ error: 'Photo too large' });
   }
-  await db.prepare('UPDATE users SET name = ?, avatar = ? WHERE id = ?').run(name, avatar, req.user.id);
-  const row = await db.prepare('SELECT id, name, email, phone, avatar_color, avatar FROM users WHERE id = ?').get(req.user.id);
+  let upi = cur.upi_id;
+  if ('upi_id' in (req.body || {})) {
+    upi = req.body.upi_id ? String(req.body.upi_id).trim().slice(0, 100) : null;
+    if (upi && !/^[\w.\-]{2,}@[a-zA-Z]{2,}$/.test(upi)) return res.status(400).json({ error: 'Enter a valid UPI id (e.g. name@okhdfc)' });
+  }
+  await db.prepare('UPDATE users SET name = ?, avatar = ?, upi_id = ? WHERE id = ?').run(name, avatar, upi, req.user.id);
+  const row = await db.prepare('SELECT id, name, email, phone, avatar_color, avatar, upi_id FROM users WHERE id = ?').get(req.user.id);
   res.json({ user: row });
 });
 

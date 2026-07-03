@@ -16,6 +16,8 @@ import expenseRoutes from './routes/expenses.js';
 import placeRoutes from './routes/places.js';
 import planRoutes from './routes/plan.js';
 import gifRoutes from './routes/gifs.js';
+import pushRoutes from './routes/push.js';
+import { pushToUsers } from './lib/push.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const PORT = process.env.PORT || 4000;
@@ -43,6 +45,7 @@ app.use('/api/expenses', expenseRoutes);
 app.use('/api/places', placeRoutes);
 app.use('/api/plan', planRoutes);
 app.use('/api/gifs', gifRoutes);
+app.use('/api/push', pushRoutes);
 
 // Serve built client if present (production single-server mode)
 const clientDist = path.join(__dirname, '..', '..', 'client', 'dist');
@@ -120,6 +123,8 @@ io.on('connection', (socket) => {
       await db.prepare('UPDATE trips SET meet_lat = ?, meet_lng = ?, meet_label = ? WHERE id = ?')
         .run(lat ?? null, lng ?? null, label || 'Meeting point', tripId);
       io.to(tripId).emit('meet:update', { lat: lat ?? null, lng: lng ?? null, label: label || 'Meeting point', by: user.name });
+      const mem = await db.prepare('SELECT user_id FROM trip_members WHERE trip_id = ? AND user_id <> ?').all(tripId, user.id);
+      pushToUsers(mem.map((m) => m.user_id), { title: '📍 Meeting point set', body: `${user.name}: ${label || 'Meeting point'}`, url: `/trip/${tripId}`, tag: 'meet-' + tripId });
     } catch (e) { console.error('meet:set error', e.message); }
   });
 
@@ -143,6 +148,12 @@ io.on('connection', (socket) => {
       await db.prepare('INSERT INTO messages (id, trip_id, user_id, name, text, kind) VALUES (?, ?, ?, ?, ?, ?)')
         .run(id, tripId, user.id, user.name, clean, k);
       io.to(tripId).emit('chat:message', { id, userId: user.id, name: user.name, text: clean, kind: k, at });
+      // Notify @mentioned members
+      if (k === 'text' && clean.includes('@')) {
+        const members = await db.prepare(`SELECT u.id, u.name FROM trip_members m JOIN users u ON u.id = m.user_id WHERE m.trip_id = ?`).all(tripId);
+        const mentioned = members.filter((mm) => mm.id !== user.id && clean.includes('@' + mm.name)).map((mm) => mm.id);
+        if (mentioned.length) pushToUsers(mentioned, { title: `${user.name} mentioned you`, body: clean.slice(0, 120), url: `/trip/${tripId}`, tag: 'chat-' + tripId });
+      }
     } catch (e) {
       console.error('chat:message error', e.message);
     }
