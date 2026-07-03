@@ -39,7 +39,7 @@ export default function LiveMap({ trip }) {
 
   const [sharing, setSharing] = useState(false);
   const [people, setPeople] = useState({});
-  const [meet, setMeet] = useState(trip.meet_lat != null ? { lat: trip.meet_lat, lng: trip.meet_lng, label: trip.meet_label } : null);
+  const [meet, setMeet] = useState((trip.meet_lat != null || trip.meet_label) ? { lat: trip.meet_lat, lng: trip.meet_lng, label: trip.meet_label } : null);
   const [placing, setPlacing] = useState(false);
   const [query, setQuery] = useState('');
   const [searching, setSearching] = useState(false);
@@ -86,9 +86,10 @@ export default function LiveMap({ trip }) {
       if (markers.current[userId]) { map.current.removeLayer(markers.current[userId]); delete markers.current[userId]; }
     });
     socket.on('meet:update', (m) => {
-      const next = m.lat != null ? { lat: m.lat, lng: m.lng, label: m.label } : null;
+      const cleared = m.lat == null && !m.label;
+      const next = cleared ? null : { lat: m.lat ?? null, lng: m.lng ?? null, label: m.label };
       setMeet(next); drawMeet(next);
-      if (m.by) toast(m.lat != null ? `${m.by} set the meeting point` : `${m.by} cleared the meeting point`);
+      if (m.by) toast(cleared ? `${m.by} cleared the meeting point` : `${m.by} set the meeting point 🚩`);
     });
 
     map.current.on('click', (e) => {
@@ -112,6 +113,7 @@ export default function LiveMap({ trip }) {
   const setByName = async () => {
     const q = query.trim();
     if (!q) return;
+    window.open(gmapsSearch(q), '_blank'); // open Google Maps right away (inside the click)
     setSearching(true);
     try {
       let d = await api.get(`/places/geocode?q=${encodeURIComponent(q)}`);

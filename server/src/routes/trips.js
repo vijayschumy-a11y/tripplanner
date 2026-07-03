@@ -76,6 +76,24 @@ router.get('/:id', async (req, res) => {
   res.json({ trip, members: await memberList(req.params.id) });
 });
 
+router.patch('/:id', async (req, res) => {
+  const trip = await db.prepare('SELECT * FROM trips WHERE id = ?').get(req.params.id);
+  if (!trip) return res.status(404).json({ error: 'Not found' });
+  if (!(await isAdmin(req.params.id, req.user.id))) return res.status(403).json({ error: 'Only owner or sub-admin can edit' });
+  const b = req.body || {};
+  const name = b.name != null ? String(b.name).trim() : trip.name;
+  const destination = b.destination != null ? String(b.destination).trim() : trip.destination;
+  if (!name || !destination) return res.status(400).json({ error: 'name and destination required' });
+  const lat = 'lat' in b ? (b.lat ?? null) : trip.lat;
+  const lng = 'lng' in b ? (b.lng ?? null) : trip.lng;
+  const start_date = 'start_date' in b ? (b.start_date || null) : trip.start_date;
+  const end_date = 'end_date' in b ? (b.end_date || null) : trip.end_date;
+  const budget = 'budget' in b ? (Number(b.budget) || 0) : trip.budget;
+  await db.prepare('UPDATE trips SET name = ?, destination = ?, lat = ?, lng = ?, start_date = ?, end_date = ?, budget = ? WHERE id = ?')
+    .run(name, destination, lat, lng, start_date, end_date, budget, req.params.id);
+  res.json({ trip: await db.prepare('SELECT * FROM trips WHERE id = ?').get(req.params.id) });
+});
+
 router.delete('/:id', async (req, res) => {
   const trip = await db.prepare('SELECT * FROM trips WHERE id = ?').get(req.params.id);
   if (!trip) return res.status(404).json({ error: 'Not found' });

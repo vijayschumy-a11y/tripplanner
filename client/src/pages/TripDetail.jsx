@@ -12,6 +12,7 @@ import LiveMap from '../components/LiveMap.jsx';
 import Checklist from '../components/Checklist.jsx';
 import Plan from '../components/Plan.jsx';
 import Chat from '../components/Chat.jsx';
+import EditTrip from '../components/EditTrip.jsx';
 
 const TABS = [
   ['overview', 'Overview', '🏠'],
@@ -33,6 +34,7 @@ export default function TripDetail() {
   const [data, setData] = useState(null);
   const [tab, setTab] = useState('overview');
   const [chatUnread, setChatUnread] = useState(0);
+  const [showEdit, setShowEdit] = useState(false);
   const tabRef = useRef(tab);
 
   const load = () => api.get(`/trips/${id}`).then(setData).catch(() => { toast('Trip not found'); nav('/'); });
@@ -65,6 +67,8 @@ export default function TripDetail() {
 
   if (!data) return <div className="container"><div className="spinner" /></div>;
   const { trip, members } = data;
+  const myRole = members.find((m) => m.id === user?.id)?.role;
+  const canEdit = myRole === 'owner' || myRole === 'sub-admin';
 
   return (
     <div className="container">
@@ -76,8 +80,12 @@ export default function TripDetail() {
             {trip.start_date && ` · ${trip.start_date} → ${trip.end_date || '…'}`}
           </p>
         </div>
-        <button className="btn ghost sm" onClick={() => nav('/')}>← All trips</button>
+        <div className="row">
+          {canEdit && <button className="btn ghost sm" onClick={() => setShowEdit(true)}>✏️ Edit</button>}
+          <button className="btn ghost sm" onClick={() => nav('/')}>← All trips</button>
+        </div>
       </div>
+      {showEdit && <EditTrip trip={trip} onClose={() => setShowEdit(false)} onSaved={() => { setShowEdit(false); load(); }} />}
 
       <div className="tabs">
         {TABS.map(([key, label, icon]) => (
