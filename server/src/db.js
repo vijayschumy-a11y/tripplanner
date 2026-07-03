@@ -156,6 +156,23 @@ CREATE TABLE IF NOT EXISTS checklist_items (
   sort       INTEGER NOT NULL DEFAULT 0,
   created_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
+
+-- Phone + OTP support (idempotent migrations for existing databases)
+ALTER TABLE users ADD COLUMN IF NOT EXISTS phone TEXT;
+ALTER TABLE users ALTER COLUMN email DROP NOT NULL;
+ALTER TABLE users ALTER COLUMN password DROP NOT NULL;
+CREATE UNIQUE INDEX IF NOT EXISTS users_phone_uidx ON users(phone) WHERE phone IS NOT NULL;
+
+CREATE TABLE IF NOT EXISTS otp_codes (
+  id         TEXT PRIMARY KEY,
+  phone      TEXT NOT NULL,
+  code_hash  TEXT NOT NULL,
+  purpose    TEXT NOT NULL,        -- 'register' | 'login' | 'reset'
+  expires_at TIMESTAMPTZ NOT NULL,
+  attempts   INTEGER NOT NULL DEFAULT 0,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS otp_phone_purpose_idx ON otp_codes(phone, purpose);
 `;
 
 async function init() {
