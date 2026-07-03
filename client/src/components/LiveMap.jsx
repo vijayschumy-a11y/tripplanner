@@ -59,11 +59,12 @@ export default function LiveMap({ trip }) {
     map.current = L.map(mapRef.current).setView([trip.lat || 20.5937, trip.lng || 78.9629], trip.lat ? 12 : 5);
     L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { attribution: '© OpenStreetMap', maxZoom: 19 }).addTo(map.current);
 
-    // Trip destination pin (everyone can navigate to it)
+    // Trip destination pin — link opens Google Maps by NAME (reliable even if the
+    // stored coords are a rough geocode) so shared links land on the right place.
     if (trip.lat != null) {
       L.marker([trip.lat, trip.lng], { icon: coloredPin('#2563eb', '🏁') })
         .addTo(map.current)
-        .bindPopup(`<strong>🏁 ${trip.destination}</strong><br/><a href="${navLink(trip.lat, trip.lng)}" target="_blank">Navigate here ↗</a>`);
+        .bindPopup(`<strong>🏁 ${trip.destination}</strong><br/><a href="${gmapsSearch(trip.destination)}" target="_blank">Open in Google Maps ↗</a>`);
     }
 
     const socket = getSocket();
@@ -186,7 +187,7 @@ export default function LiveMap({ trip }) {
         <div className="card" style={{ marginBottom: 12 }}>
           <div className="between">
             <div><strong>🏁 Trip destination</strong><div className="muted" style={{ fontSize: 13 }}>{trip.destination}</div></div>
-            <a className="btn sm" href={navLink(trip.lat, trip.lng)} target="_blank" rel="noreferrer">Navigate ↗</a>
+            <a className="btn sm" href={gmapsSearch(trip.destination)} target="_blank" rel="noreferrer">Open in Maps ↗</a>
           </div>
         </div>
       )}

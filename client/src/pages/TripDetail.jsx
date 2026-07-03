@@ -63,7 +63,7 @@ export default function TripDetail() {
       {tab === 'explore' && <Explore trip={trip} />}
       {tab === 'itinerary' && <Itinerary tripId={id} trip={trip} />}
       {tab === 'checklist' && <Checklist tripId={id} />}
-      {tab === 'chat' && <Chat tripId={id} />}
+      {tab === 'chat' && <Chat tripId={id} members={members} />}
       {tab === 'live' && <LiveMap trip={trip} />}
       {tab === 'members' && <Members tripId={id} trip={trip} members={members} onChange={load} />}
     </div>

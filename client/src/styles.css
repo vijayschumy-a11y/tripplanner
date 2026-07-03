@@ -130,6 +130,8 @@ label { font-size: 13px; color: var(--muted); display: block; margin-bottom: 6px
 .chat-box { height: 240px; overflow-y: auto; display: flex; flex-direction: column; gap: 6px; padding: 4px; }
 .chat-msg { padding: 7px 11px; border-radius: 10px; background: var(--surface-2); max-width: 85%; }
 .chat-msg.me { align-self: flex-end; background: var(--primary-600); }
+.mention { background: rgba(59,130,246,.25); color: #bfdbfe; border-radius: 5px; padding: 0 3px; font-weight: 600; }
+.chat-msg.me .mention { background: rgba(255,255,255,.25); color: #fff; }
 
 .spinner { width: 18px; height: 18px; border: 2px solid var(--border); border-top-color: var(--primary); border-radius: 50%; animation: spin .8s linear infinite; }
 @keyframes spin { to { transform: rotate(360deg); } }
