@@ -47,7 +47,33 @@ export async function nearby(category, lat, lng, radius = 3000) {
     .sort((a, b) => a.distance - b.distance);
 }
 
+// Google Places resolves informal/local names (e.g. "Kora food street") that OSM
+// doesn't. Used only when GOOGLE_MAPS_API_KEY is set; otherwise free Nominatim.
 export async function geocode(query) {
+  if (process.env.GOOGLE_MAPS_API_KEY) {
+    try {
+      const g = await googlePlaces(query);
+      if (g.length) return g;
+    } catch { /* fall back to OSM */ }
+  }
+  return nominatim(query);
+}
+
+async function googlePlaces(query) {
+  const url = `https://maps.googleapis.com/maps/api/place/textsearch/json?query=${encodeURIComponent(query)}&region=in&key=${process.env.GOOGLE_MAPS_API_KEY}`;
+  const res = await fetch(url);
+  const data = await res.json();
+  if (data.status && !['OK', 'ZERO_RESULTS'].includes(data.status))
+    throw new Error('Google ' + data.status + (data.error_message ? ': ' + data.error_message : ''));
+  return (data.results || []).slice(0, 6).map((r) => ({
+    name: r.name ? `${r.name}, ${r.formatted_address || ''}`.replace(/,\s*$/, '') : r.formatted_address,
+    lat: r.geometry.location.lat,
+    lng: r.geometry.location.lng,
+    type: (r.types || [])[0] || 'place',
+  }));
+}
+
+async function nominatim(query) {
   const url = `${NOMINATIM}/search?format=json&limit=6&countrycodes=in&q=${encodeURIComponent(query)}`;
   const res = await fetch(url, { headers: { 'User-Agent': UA } });
   if (!res.ok) throw new Error('Geocode error ' + res.status);
