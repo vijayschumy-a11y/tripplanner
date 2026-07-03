@@ -102,6 +102,24 @@ io.on('connection', (socket) => {
     }
   });
 
+  socket.on('meet:set', async ({ tripId, lat, lng, label }) => {
+    if (lat == null || lng == null) return;
+    try {
+      if (!(await isMember(tripId, user.id))) return;
+      await db.prepare('UPDATE trips SET meet_lat = ?, meet_lng = ?, meet_label = ? WHERE id = ?')
+        .run(lat, lng, label || 'Meeting point', tripId);
+      io.to(tripId).emit('meet:update', { lat, lng, label: label || 'Meeting point', by: user.name });
+    } catch (e) { console.error('meet:set error', e.message); }
+  });
+
+  socket.on('meet:clear', async ({ tripId }) => {
+    try {
+      if (!(await isMember(tripId, user.id))) return;
+      await db.prepare('UPDATE trips SET meet_lat = NULL, meet_lng = NULL, meet_label = NULL WHERE id = ?').run(tripId);
+      io.to(tripId).emit('meet:update', { lat: null, lng: null, label: null, by: user.name });
+    } catch (e) { console.error('meet:clear error', e.message); }
+  });
+
   socket.on('chat:message', async ({ tripId, text }) => {
     if (!text || !text.trim()) return;
     try {

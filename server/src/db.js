@@ -198,6 +198,11 @@ CREATE UNIQUE INDEX IF NOT EXISTS trips_invite_code_uidx ON trips(invite_code) W
 -- Profile photo (small base64 data URL)
 ALTER TABLE users ADD COLUMN IF NOT EXISTS avatar TEXT;
 
+-- Shared meeting point (rendezvous) for the trip
+ALTER TABLE trips ADD COLUMN IF NOT EXISTS meet_lat DOUBLE PRECISION;
+ALTER TABLE trips ADD COLUMN IF NOT EXISTS meet_lng DOUBLE PRECISION;
+ALTER TABLE trips ADD COLUMN IF NOT EXISTS meet_label TEXT;
+
 -- Persistent trip chat
 CREATE TABLE IF NOT EXISTS messages (
   id         TEXT PRIMARY KEY,
