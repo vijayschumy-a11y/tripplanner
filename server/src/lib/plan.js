@@ -101,8 +101,8 @@ const DISHES = {
   pizza:   { veg: ['Margherita', 'Farmhouse'], nonveg: ['Chicken Pizza', 'Pepperoni'] },
   default: { veg: ['Paneer Tikka', 'Veg Biryani', 'Masala Dosa'], nonveg: ['Chicken Biryani', 'Tandoori Chicken'] },
 };
-function suggestDishes(cuisine = '') {
-  const c = cuisine.toLowerCase();
+function suggestDishes(cuisine) {
+  const c = (cuisine || '').toLowerCase();
   if (c.includes('south') || c.includes('tamil') || c.includes('kerala') || c.includes('andhra')) return DISHES.south;
   if (c.includes('north') || c.includes('punjabi') || c.includes('mughlai')) return DISHES.north;
   if (c.includes('chinese') || c.includes('asian')) return DISHES.chinese;
