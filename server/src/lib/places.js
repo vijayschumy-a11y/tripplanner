@@ -104,17 +104,21 @@ export async function resolveMapLink(url) {
   return { lat: coords?.lat ?? null, lng: coords?.lng ?? null, label: label || null };
 }
 
+// Reject Google's opaque tokens (long, no spaces) that appear on consent pages
+const looksLikeToken = (v) => /^[A-Za-z0-9_-]{18,}$/.test(v);
 function extractQueryName(u = '') {
   const m = u.match(/[?&](?:q|query)=([^&]+)/);
   if (!m) return null;
   const v = decodeURIComponent(m[1].replace(/\+/g, ' ')).trim();
-  return /^-?\d+\.\d+,-?\d+\.\d+$/.test(v) ? null : v.slice(0, 80);
+  if (/^-?\d+\.\d+,-?\d+\.\d+$/.test(v) || looksLikeToken(v)) return null;
+  return v.slice(0, 80);
 }
 function extractTitle(html = '') {
   const m = html.match(/<title>([^<]+)<\/title>/i);
   if (!m) return null;
   const t = m[1].replace(/\s*-\s*Google (Search|Maps).*$/i, '').trim();
-  return t && t.length > 1 ? t.slice(0, 80) : null;
+  if (!t || t.length < 2 || /^Google (Search|Maps)$/i.test(t) || looksLikeToken(t)) return null;
+  return t.slice(0, 80);
 }
 
 function extractCoords(u = '') {

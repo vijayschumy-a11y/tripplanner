@@ -22,7 +22,7 @@ router.get('/resolve', async (req, res) => {
   if (!req.query.url) return res.status(400).json({ error: 'url required' });
   try {
     const result = await resolveMapLink(String(req.query.url));
-    if (!result) return res.status(422).json({ error: "Couldn't read a location from that link" });
+    if (!result) return res.status(422).json({ error: "Couldn't read that link. In Google Maps, use Share → Copy link (a maps.app.goo.gl link)." });
     res.json({ result });
   } catch (e) {
     res.status(502).json({ error: 'Could not resolve the link' });
