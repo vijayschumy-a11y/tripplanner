@@ -13,6 +13,10 @@ function haversine(aLat, aLng, bLat, bLng) {
 }
 const fmtDist = (m) => (m == null ? '' : m < 1000 ? `${Math.round(m)} m` : `${(m / 1000).toFixed(1)} km`);
 const navLink = (lat, lng) => `https://www.google.com/maps/dir/?api=1&destination=${lat},${lng}`;
+// Open a place in Google Maps by name (Google resolves local/informal names well)
+const gmapsSearch = (q) => `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(q)}`;
+// Best link for the meeting point: by name if we have one, else by coords
+const meetLink = (m) => (m.label ? gmapsSearch(m.label) : navLink(m.lat, m.lng));
 const ago = (t) => {
   const s = Math.round((Date.now() - new Date(t).getTime()) / 1000);
   if (!isFinite(s)) return '';
@@ -37,9 +41,7 @@ export default function LiveMap({ trip }) {
   const [people, setPeople] = useState({});
   const [meet, setMeet] = useState(trip.meet_lat != null ? { lat: trip.meet_lat, lng: trip.meet_lng, label: trip.meet_label } : null);
   const [placing, setPlacing] = useState(false);
-  const [meetName, setMeetName] = useState('');
   const [query, setQuery] = useState('');
-  const [results, setResults] = useState([]);
   const [searching, setSearching] = useState(false);
   const [, force] = useState(0);
 
@@ -100,24 +102,33 @@ export default function LiveMap({ trip }) {
   }, [trip.id]);
 
   // ---- meeting point actions ----
-  const searchPlace = async () => {
-    if (!query.trim()) return;
+  // Type a place -> auto-pin the best match; if the free geocoder can't find it,
+  // still set it by name so Google Maps opens the exact spot for everyone.
+  const setByName = async () => {
+    const q = query.trim();
+    if (!q) return;
     setSearching(true);
     try {
-      const d = await api.get(`/places/geocode?q=${encodeURIComponent(query)}`);
-      setResults(d.results);
-      if (!d.results.length) toast('No place found — try a fuller name');
+      let d = await api.get(`/places/geocode?q=${encodeURIComponent(q)}`);
+      if (!d.results.length && trip.destination) {
+        d = await api.get(`/places/geocode?q=${encodeURIComponent(q + ', ' + trip.destination)}`);
+      }
+      if (d.results.length) {
+        const r = d.results[0];
+        getSocket().emit('meet:set', { tripId: trip.id, lat: r.lat, lng: r.lng, label: q });
+        toast('Meeting point pinned ✓');
+      } else {
+        getSocket().emit('meet:set', { tripId: trip.id, label: q });
+        toast('Set by name — “Open in Google Maps” finds the exact spot');
+      }
+      setQuery('');
     } catch { toast('Search failed'); } finally { setSearching(false); }
   };
-  const pickResult = (r) => {
-    const label = meetName.trim() || r.name.split(',').slice(0, 2).join(',');
-    getSocket().emit('meet:set', { tripId: trip.id, lat: r.lat, lng: r.lng, label });
-    setResults([]); setQuery('');
-  };
-  const startPlacing = () => { meetNameRef.current = meetName.trim() || 'Meeting point'; placingRef.current = true; setPlacing(true); toast('Tap the map to drop the meeting point'); };
+  const startPlacing = () => { meetNameRef.current = query.trim() || 'Meeting point'; placingRef.current = true; setPlacing(true); toast('Tap the map to drop the meeting point'); };
   const meetHere = () => {
     if (!myPos.current) return toast('Tap “Locate me” or “Share” first');
-    getSocket().emit('meet:set', { tripId: trip.id, lat: myPos.current.lat, lng: myPos.current.lng, label: meetName.trim() || 'Meeting point' });
+    getSocket().emit('meet:set', { tripId: trip.id, lat: myPos.current.lat, lng: myPos.current.lng, label: query.trim() || 'Meeting point' });
+    setQuery('');
   };
   const clearMeet = () => getSocket().emit('meet:clear', { tripId: trip.id });
 
@@ -190,30 +201,16 @@ export default function LiveMap({ trip }) {
               <strong>{meet.label || 'Meeting point'}</strong>
               <div className="muted" style={{ fontSize: 12 }}>{distToMeet != null ? `${fmtDist(distToMeet)} from you · shared with all` : 'Shared with everyone'}</div>
             </div>
-            <a className="btn sm" href={navLink(meet.lat, meet.lng)} target="_blank" rel="noreferrer">Navigate ↗</a>
+            <a className="btn sm" href={meetLink(meet)} target="_blank" rel="noreferrer">Open in Maps ↗</a>
             <button className="btn danger sm" onClick={clearMeet}>Clear</button>
           </div>
         )}
-        <p className="muted" style={{ fontSize: 13, margin: '8px 0' }}>{meet ? 'Change it — ' : ''}search a place, tap the map, or use your location.</p>
-        <div className="field" style={{ marginBottom: 8 }}>
-          <div className="row">
-            <input className="input" value={meetName} onChange={(e) => setMeetName(e.target.value)} placeholder="Label (optional, e.g. Beach café)" />
-          </div>
+        <p className="muted" style={{ fontSize: 13, margin: '8px 0' }}>{meet ? 'Change it — t' : 'T'}ype a place and it drops a pin everyone can open in Google Maps.</p>
+        <div className="row">
+          <input className="input" value={query} onChange={(e) => setQuery(e.target.value)} placeholder="e.g. Kora food street, Velachery" onKeyDown={(e) => e.key === 'Enter' && setByName()} />
+          <button className="btn primary" onClick={setByName} disabled={searching}>{searching ? '…' : 'Set'}</button>
         </div>
-        <div className="row" style={{ marginBottom: results.length ? 8 : 0 }}>
-          <input className="input" value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Search a place…" onKeyDown={(e) => e.key === 'Enter' && searchPlace()} />
-          <button className="btn primary" onClick={searchPlace} disabled={searching}>{searching ? '…' : 'Find'}</button>
-        </div>
-        {results.length > 0 && (
-          <div style={{ maxHeight: 160, overflow: 'auto', marginBottom: 8 }}>
-            {results.map((r, i) => (
-              <div key={i} className="list-item" style={{ cursor: 'pointer' }} onClick={() => pickResult(r)}>
-                <span>📍</span><span style={{ fontSize: 13 }}>{r.name}</span>
-              </div>
-            ))}
-          </div>
-        )}
-        <div className="row wrap">
+        <div className="row wrap" style={{ marginTop: 8 }}>
           <button className={`btn ${placing ? 'primary' : ''}`} onClick={startPlacing}>{placing ? '👆 Tap the map…' : '📌 Tap map'}</button>
           <button className="btn" onClick={meetHere}>📍 Use my location</button>
         </div>

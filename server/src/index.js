@@ -103,12 +103,12 @@ io.on('connection', (socket) => {
   });
 
   socket.on('meet:set', async ({ tripId, lat, lng, label }) => {
-    if (lat == null || lng == null) return;
+    if (!label && lat == null) return; // need at least a name or coords
     try {
       if (!(await isMember(tripId, user.id))) return;
       await db.prepare('UPDATE trips SET meet_lat = ?, meet_lng = ?, meet_label = ? WHERE id = ?')
-        .run(lat, lng, label || 'Meeting point', tripId);
-      io.to(tripId).emit('meet:update', { lat, lng, label: label || 'Meeting point', by: user.name });
+        .run(lat ?? null, lng ?? null, label || 'Meeting point', tripId);
+      io.to(tripId).emit('meet:update', { lat: lat ?? null, lng: lng ?? null, label: label || 'Meeting point', by: user.name });
     } catch (e) { console.error('meet:set error', e.message); }
   });
 
