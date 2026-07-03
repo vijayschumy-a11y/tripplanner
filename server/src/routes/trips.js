@@ -251,7 +251,7 @@ router.delete('/:id/checklist/:itemId', async (req, res) => {
 router.get('/:id/messages', async (req, res) => {
   if (!(await isMember(req.params.id, req.user.id))) return res.status(403).json({ error: 'Not a member' });
   const rows = await db
-    .prepare('SELECT id, user_id, name, text, created_at FROM messages WHERE trip_id = ? ORDER BY created_at DESC LIMIT 100')
+    .prepare('SELECT id, user_id, name, text, kind, created_at FROM messages WHERE trip_id = ? ORDER BY created_at DESC LIMIT 100')
     .all(req.params.id);
   res.json({ messages: rows.reverse() });
 });

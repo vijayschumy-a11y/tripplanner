@@ -15,6 +15,7 @@ import tripRoutes from './routes/trips.js';
 import expenseRoutes from './routes/expenses.js';
 import placeRoutes from './routes/places.js';
 import planRoutes from './routes/plan.js';
+import gifRoutes from './routes/gifs.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const PORT = process.env.PORT || 4000;
@@ -41,6 +42,7 @@ app.use('/api/trips', tripRoutes);
 app.use('/api/expenses', expenseRoutes);
 app.use('/api/places', placeRoutes);
 app.use('/api/plan', planRoutes);
+app.use('/api/gifs', gifRoutes);
 
 // Serve built client if present (production single-server mode)
 const clientDist = path.join(__dirname, '..', '..', 'client', 'dist');
@@ -76,7 +78,8 @@ io.on('connection', (socket) => {
       const locs = await db
         .prepare(
           `SELECT l.user_id, l.lat, l.lng, l.updated_at, u.name, u.avatar_color
-           FROM locations l JOIN users u ON u.id = l.user_id WHERE l.trip_id = ?`
+           FROM locations l JOIN users u ON u.id = l.user_id
+           WHERE l.trip_id = ? AND l.updated_at > now() - interval '5 minutes'`
         )
         .all(tripId);
       socket.emit('location:snapshot', locs);
@@ -102,6 +105,14 @@ io.on('connection', (socket) => {
     }
   });
 
+  socket.on('location:stop', async ({ tripId }) => {
+    try {
+      if (!(await isMember(tripId, user.id))) return;
+      await db.prepare('DELETE FROM locations WHERE trip_id = ? AND user_id = ?').run(tripId, user.id);
+      io.to(tripId).emit('location:gone', { userId: user.id });
+    } catch (e) { console.error('location:stop error', e.message); }
+  });
+
   socket.on('meet:set', async ({ tripId, lat, lng, label }) => {
     if (!label && lat == null) return; // need at least a name or coords
     try {
@@ -120,16 +131,18 @@ io.on('connection', (socket) => {
     } catch (e) { console.error('meet:clear error', e.message); }
   });
 
-  socket.on('chat:message', async ({ tripId, text }) => {
-    if (!text || !text.trim()) return;
+  socket.on('chat:message', async ({ tripId, text, kind }) => {
+    if (!text || !String(text).trim()) return;
+    const k = ['text', 'image', 'gif', 'sticker'].includes(kind) ? kind : 'text';
     try {
       if (!(await isMember(tripId, user.id))) return;
+      const max = k === 'text' ? 2000 : k === 'image' ? 400000 : 1000; // image = base64
+      const clean = String(text).slice(0, max);
       const id = randomUUID();
       const at = new Date().toISOString();
-      const clean = String(text).slice(0, 2000);
-      await db.prepare('INSERT INTO messages (id, trip_id, user_id, name, text) VALUES (?, ?, ?, ?, ?)')
-        .run(id, tripId, user.id, user.name, clean);
-      io.to(tripId).emit('chat:message', { id, userId: user.id, name: user.name, text: clean, at });
+      await db.prepare('INSERT INTO messages (id, trip_id, user_id, name, text, kind) VALUES (?, ?, ?, ?, ?, ?)')
+        .run(id, tripId, user.id, user.name, clean, k);
+      io.to(tripId).emit('chat:message', { id, userId: user.id, name: user.name, text: clean, kind: k, at });
     } catch (e) {
       console.error('chat:message error', e.message);
     }

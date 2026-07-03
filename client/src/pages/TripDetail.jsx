@@ -1,7 +1,9 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { api } from '../lib/api.js';
 import { rupee, useToast } from '../lib/ui.jsx';
+import { getSocket } from '../lib/socket.js';
+import { useAuth } from '../App.jsx';
 import Members from '../components/Members.jsx';
 import Expenses from '../components/Expenses.jsx';
 import Explore from '../components/Explore.jsx';
@@ -27,11 +29,39 @@ export default function TripDetail() {
   const { id } = useParams();
   const nav = useNavigate();
   const toast = useToast();
+  const { user } = useAuth();
   const [data, setData] = useState(null);
   const [tab, setTab] = useState('overview');
+  const [chatUnread, setChatUnread] = useState(0);
+  const tabRef = useRef(tab);
 
   const load = () => api.get(`/trips/${id}`).then(setData).catch(() => { toast('Trip not found'); nav('/'); });
   useEffect(() => { load(); }, [id]);
+
+  // Clear the mention badge when the Chat tab is opened
+  useEffect(() => {
+    tabRef.current = tab;
+    if (tab === 'chat') { setChatUnread(0); localStorage.setItem(`tp_chatread_${id}`, String(Date.now())); }
+  }, [tab, id]);
+
+  // Count unread @mentions of me (history + realtime) while not on the Chat tab
+  useEffect(() => {
+    if (!user) return;
+    const mention = '@' + user.name;
+    const readKey = `tp_chatread_${id}`;
+    api.get(`/trips/${id}/messages`).then((d) => {
+      const last = Number(localStorage.getItem(readKey) || 0);
+      const n = d.messages.filter((m) => m.user_id !== user.id && new Date(m.created_at).getTime() > last && (m.text || '').includes(mention)).length;
+      if (tabRef.current !== 'chat') setChatUnread(n);
+    }).catch(() => {});
+    const socket = getSocket();
+    socket.emit('trip:join', id);
+    const onMsg = (m) => {
+      if (m.userId !== user.id && (m.text || '').includes(mention) && tabRef.current !== 'chat') setChatUnread((c) => c + 1);
+    };
+    socket.on('chat:message', onMsg);
+    return () => socket.off('chat:message', onMsg);
+  }, [id, user]);
 
   if (!data) return <div className="container"><div className="spinner" /></div>;
   const { trip, members } = data;
@@ -53,6 +83,7 @@ export default function TripDetail() {
         {TABS.map(([key, label, icon]) => (
           <button key={key} className={`tab ${tab === key ? 'active' : ''}`} onClick={() => setTab(key)}>
             {icon} {label}
+            {key === 'chat' && chatUnread > 0 && <span className="tab-badge">{chatUnread}</span>}
           </button>
         ))}
       </div>

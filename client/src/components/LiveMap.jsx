@@ -81,6 +81,10 @@ export default function LiveMap({ trip }) {
 
     socket.on('location:snapshot', (list) => list.forEach(upsert));
     socket.on('location:update', upsert);
+    socket.on('location:gone', ({ userId }) => {
+      setPeople((prev) => { const n = { ...prev }; delete n[userId]; return n; });
+      if (markers.current[userId]) { map.current.removeLayer(markers.current[userId]); delete markers.current[userId]; }
+    });
     socket.on('meet:update', (m) => {
       const next = m.lat != null ? { lat: m.lat, lng: m.lng, label: m.label } : null;
       setMeet(next); drawMeet(next);
@@ -96,8 +100,8 @@ export default function LiveMap({ trip }) {
     if (meet) drawMeet(meet);
 
     return () => {
-      socket.off('location:snapshot'); socket.off('location:update'); socket.off('meet:update');
-      if (watchId.current) navigator.geolocation.clearWatch(watchId.current);
+      socket.off('location:snapshot'); socket.off('location:update'); socket.off('location:gone'); socket.off('meet:update');
+      if (watchId.current) { navigator.geolocation.clearWatch(watchId.current); socket.emit('location:stop', { tripId: trip.id }); }
       map.current.remove();
     };
   }, [trip.id]);
@@ -138,7 +142,9 @@ export default function LiveMap({ trip }) {
     const socket = getSocket();
     if (sharing) {
       if (watchId.current) navigator.geolocation.clearWatch(watchId.current);
-      watchId.current = null; setSharing(false); toast('Stopped sharing');
+      watchId.current = null; setSharing(false);
+      socket.emit('location:stop', { tripId: trip.id }); // remove me from everyone's map
+      toast('Stopped sharing');
       return;
     }
     if (!navigator.geolocation) return toast('Geolocation not supported');
