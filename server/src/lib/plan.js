@@ -145,13 +145,10 @@ async function attractionsNear(lat, lng, radius) {
 export async function generatePlan({ destLat, destLng, destName, days, startName, startLat, startLng }) {
   days = Math.max(1, Math.min(Number(days) || 2, 7));
 
+  // Query providers independently & sequentially so one failure doesn't sink the plan
   let attractionsRaw = [], food = [];
-  try {
-    [attractionsRaw, food] = await Promise.all([
-      attractionsNear(destLat, destLng, 15000),
-      nearby('food', destLat, destLng, 9000),
-    ]);
-  } catch { /* fall through with whatever we got */ }
+  try { attractionsRaw = await attractionsNear(destLat, destLng, 15000); } catch { /* keep empty */ }
+  try { food = await nearby('food', destLat, destLng, 9000); } catch { /* keep empty */ }
 
   // de-duplicate food by name so meals don't repeat the same place
   const fseen = new Set();

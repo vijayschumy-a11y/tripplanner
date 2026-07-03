@@ -50,6 +50,7 @@ router.post('/generate', async (req, res) => {
       startName: startName || null, startLat: startLat ?? null, startLng: startLng ?? null,
     });
   } catch (e) {
+    console.error('plan/generate error:', e.stack || e.message);
     return res.status(502).json({ error: 'Could not build the plan (places provider busy) — try again.' });
   }
 
