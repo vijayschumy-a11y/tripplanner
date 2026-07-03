@@ -86,6 +86,38 @@ async function nominatim(query) {
   }));
 }
 
+// Resolve a Google/Apple Maps share link to coordinates (follows short links).
+export async function resolveMapLink(url) {
+  let finalUrl = url, html = '';
+  try {
+    const res = await fetch(url, { redirect: 'follow', headers: { 'User-Agent': UA } });
+    finalUrl = res.url || url;
+    html = await res.text().catch(() => '');
+  } catch { /* fall back to parsing the raw url */ }
+  const coords = extractCoords(finalUrl) || extractCoords(url) || extractCoordsFromHtml(html);
+  const label = extractLabel(finalUrl) || extractLabel(url);
+  return coords ? { ...coords, label } : null;
+}
+
+function extractCoords(u = '') {
+  let m = u.match(/@(-?\d+\.\d+),(-?\d+\.\d+)/); if (m) return { lat: +m[1], lng: +m[2] };
+  m = u.match(/[?&](?:q|query|ll|center|destination)=(-?\d+\.\d+),(-?\d+\.\d+)/); if (m) return { lat: +m[1], lng: +m[2] };
+  m = u.match(/!3d(-?\d+\.\d+)!4d(-?\d+\.\d+)/); if (m) return { lat: +m[1], lng: +m[2] };
+  m = u.match(/\/(-?\d+\.\d+),(-?\d+\.\d+)/); if (m) return { lat: +m[1], lng: +m[2] };
+  return null;
+}
+function extractCoordsFromHtml(html = '') {
+  if (!html) return null;
+  let m = html.match(/@(-?\d+\.\d{3,}),(-?\d+\.\d{3,})/); if (m) return { lat: +m[1], lng: +m[2] };
+  m = html.match(/\[null,null,(-?\d+\.\d{3,}),(-?\d+\.\d{3,})\]/); if (m) return { lat: +m[1], lng: +m[2] };
+  m = html.match(/"latitude":(-?\d+\.\d{3,}),"longitude":(-?\d+\.\d{3,})/); if (m) return { lat: +m[1], lng: +m[2] };
+  return null;
+}
+function extractLabel(u = '') {
+  const m = u.match(/\/place\/([^/@]+)/);
+  return m ? decodeURIComponent(m[1].replace(/\+/g, ' ')).slice(0, 80) : null;
+}
+
 function haversine(lat1, lon1, lat2, lon2) {
   const R = 6371000;
   const toRad = (x) => (x * Math.PI) / 180;

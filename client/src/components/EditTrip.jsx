@@ -18,14 +18,24 @@ export default function EditTrip({ trip, onClose, onSaved }) {
   const [busy, setBusy] = useState(false);
   const set = (k) => (e) => setForm({ ...form, [k]: e.target.value });
 
+  const isMapLink = (s) => /^https?:\/\//i.test(s) && /(google\.[a-z.]+\/maps|maps\.google|goo\.gl|maps\.app\.goo\.gl)/i.test(s);
   const search = async () => {
-    if (!form.destination) return;
+    const q = form.destination.trim();
+    if (!q) return;
     setSearching(true);
     try {
-      const d = await api.get(`/places/geocode?q=${encodeURIComponent(form.destination)}`);
+      if (isMapLink(q)) {
+        const d = await api.get(`/places/resolve?url=${encodeURIComponent(q)}`);
+        const r = d.result;
+        setPicked({ lat: r.lat, lng: r.lng });
+        setForm({ ...form, destination: r.label || form.destination });
+        toast('Location set from link ✓');
+        return;
+      }
+      const d = await api.get(`/places/geocode?q=${encodeURIComponent(q)}`);
       setResults(d.results);
       if (!d.results.length) toast('No place found — you can still save the name');
-    } catch { toast('Search failed'); } finally { setSearching(false); }
+    } catch (e) { toast(e.message || 'Search failed'); } finally { setSearching(false); }
   };
 
   const pick = (r) => {
@@ -57,9 +67,9 @@ export default function EditTrip({ trip, onClose, onSaved }) {
       <div className="field"><label>Trip name</label>
         <input className="input" value={form.name} onChange={set('name')} /></div>
       <div className="field">
-        <label>Destination (this shows on the trips list)</label>
+        <label>Destination — type a place or paste a Google Maps link (shows on the trips list)</label>
         <div className="row">
-          <input className="input" value={form.destination} onChange={set('destination')} placeholder="Resort / city / place" onKeyDown={(e) => e.key === 'Enter' && search()} />
+          <input className="input" value={form.destination} onChange={set('destination')} placeholder="Resort name or paste a Maps link…" onKeyDown={(e) => e.key === 'Enter' && search()} />
           <button className="btn" onClick={search} disabled={searching}>{searching ? '…' : 'Find'}</button>
         </div>
         {results.length > 0 && (

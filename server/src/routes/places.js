@@ -1,6 +1,6 @@
 import { Router } from 'express';
 import { requireAuth } from '../lib/auth.js';
-import { nearby, geocode } from '../lib/places.js';
+import { nearby, geocode, resolveMapLink } from '../lib/places.js';
 
 const router = Router();
 router.use(requireAuth);
@@ -14,6 +14,18 @@ router.get('/nearby', async (req, res) => {
     res.json({ results });
   } catch (e) {
     res.status(502).json({ error: 'Could not reach places provider', detail: String(e.message) });
+  }
+});
+
+// GET /api/places/resolve?url=<google maps link>
+router.get('/resolve', async (req, res) => {
+  if (!req.query.url) return res.status(400).json({ error: 'url required' });
+  try {
+    const result = await resolveMapLink(String(req.query.url));
+    if (!result) return res.status(422).json({ error: "Couldn't read a location from that link" });
+    res.json({ result });
+  } catch (e) {
+    res.status(502).json({ error: 'Could not resolve the link' });
   }
 });
 

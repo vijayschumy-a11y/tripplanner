@@ -15,6 +15,7 @@ const fmtDist = (m) => (m == null ? '' : m < 1000 ? `${Math.round(m)} m` : `${(m
 const navLink = (lat, lng) => `https://www.google.com/maps/dir/?api=1&destination=${lat},${lng}`;
 // Open a place in Google Maps by name (Google resolves local/informal names well)
 const gmapsSearch = (q) => `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(q)}`;
+const isMapLink = (s) => /^https?:\/\//i.test(s) && /(google\.[a-z.]+\/maps|maps\.google|goo\.gl|maps\.app\.goo\.gl)/i.test(s);
 // Best link for the meeting point: by name if we have one, else by coords
 const meetLink = (m) => (m.label ? gmapsSearch(m.label) : navLink(m.lat, m.lng));
 const ago = (t) => {
@@ -113,9 +114,18 @@ export default function LiveMap({ trip }) {
   const setByName = async () => {
     const q = query.trim();
     if (!q) return;
-    window.open(gmapsSearch(q), '_blank'); // open Google Maps right away (inside the click)
     setSearching(true);
     try {
+      // Pasted a Google Maps link -> resolve to exact coordinates
+      if (isMapLink(q)) {
+        const d = await api.get(`/places/resolve?url=${encodeURIComponent(q)}`);
+        const r = d.result;
+        getSocket().emit('meet:set', { tripId: trip.id, lat: r.lat, lng: r.lng, label: r.label || 'Meeting point' });
+        toast('Pinned from your link ✓');
+        setQuery('');
+        return;
+      }
+      window.open(gmapsSearch(q), '_blank'); // typed a name -> open Google Maps too
       let d = await api.get(`/places/geocode?q=${encodeURIComponent(q)}`);
       if (!d.results.length && trip.destination) {
         d = await api.get(`/places/geocode?q=${encodeURIComponent(q + ', ' + trip.destination)}`);
@@ -129,7 +139,7 @@ export default function LiveMap({ trip }) {
         toast('Set by name — “Open in Google Maps” finds the exact spot');
       }
       setQuery('');
-    } catch { toast('Search failed'); } finally { setSearching(false); }
+    } catch (e) { toast(e.message || 'Could not set that'); } finally { setSearching(false); }
   };
   const startPlacing = () => { meetNameRef.current = query.trim() || 'Meeting point'; placingRef.current = true; setPlacing(true); toast('Tap the map to drop the meeting point'); };
   const meetHere = () => {
@@ -214,9 +224,9 @@ export default function LiveMap({ trip }) {
             <button className="btn danger sm" onClick={clearMeet}>Clear</button>
           </div>
         )}
-        <p className="muted" style={{ fontSize: 13, margin: '8px 0' }}>{meet ? 'Change it — t' : 'T'}ype a place and it drops a pin everyone can open in Google Maps.</p>
+        <p className="muted" style={{ fontSize: 13, margin: '8px 0' }}>{meet ? 'Change it — t' : 'T'}ype a place <strong>or paste a Google Maps link</strong> — everyone can open it in Google Maps.</p>
         <div className="row">
-          <input className="input" value={query} onChange={(e) => setQuery(e.target.value)} placeholder="e.g. Kora food street, Velachery" onKeyDown={(e) => e.key === 'Enter' && setByName()} />
+          <input className="input" value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Place name or paste a Maps link…" onKeyDown={(e) => e.key === 'Enter' && setByName()} />
           <button className="btn primary" onClick={setByName} disabled={searching}>{searching ? '…' : 'Set'}</button>
         </div>
         <div className="row wrap" style={{ marginTop: 8 }}>
