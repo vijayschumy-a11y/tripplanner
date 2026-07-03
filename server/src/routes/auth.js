@@ -10,7 +10,14 @@ const router = Router();
 const COLORS = ['#2563eb', '#dc2626', '#16a34a', '#d97706', '#7c3aed', '#0891b2', '#db2777'];
 const randomColor = () => COLORS[Math.floor(Math.random() * COLORS.length)];
 
-const normalizePhone = (p) => (p || '').replace(/\D/g, '');
+// Canonicalise to digits with country code (India-first).
+// "9176699497" / "+91 9176699497" / "0917..." all -> "919176699497".
+const normalizePhone = (p) => {
+  let d = String(p || '').replace(/\D/g, '');
+  if (d.length === 11 && d.startsWith('0')) d = d.slice(1); // drop STD trunk 0
+  if (d.length === 10 && /^[6-9]/.test(d)) d = '91' + d; // bare Indian mobile
+  return d;
+};
 const genCode = () => String(Math.floor(100000 + Math.random() * 900000));
 const publicUser = (u) => ({ id: u.id, name: u.name, email: u.email, phone: u.phone, avatar_color: u.avatar_color });
 
