@@ -37,7 +37,7 @@ export async function sendOtp(phone, code, message) {
     return { demo: true };
   }
   if (CHANNEL === 'fast2sms') return fast2sms(phone, code);
-  return twilio(phone, message);
+  return twilio(phone, message, code);
 }
 
 async function fast2sms(phone, code) {
@@ -58,12 +58,20 @@ async function fast2sms(phone, code) {
   return { demo: false, channel: 'fast2sms', request_id: data.request_id };
 }
 
-async function twilio(phone, message) {
+async function twilio(phone, message, code) {
   const from = CHANNEL === 'whatsapp'
     ? 'whatsapp:' + e164(WHATSAPP_FROM.replace(/^whatsapp:/, ''))
     : e164(SMS_FROM);
   const to = CHANNEL === 'whatsapp' ? 'whatsapp:' + e164(phone) : e164(phone);
-  const body = new URLSearchParams({ To: to, From: from, Body: message });
+  const body = new URLSearchParams({ To: to, From: from });
+  // Production WhatsApp to non-opted-in numbers requires an approved template.
+  // If a template SID is configured, send via it ({{1}} = the code); else free-form.
+  if (CHANNEL === 'whatsapp' && process.env.TWILIO_OTP_TEMPLATE_SID) {
+    body.set('ContentSid', process.env.TWILIO_OTP_TEMPLATE_SID);
+    body.set('ContentVariables', JSON.stringify({ 1: code }));
+  } else {
+    body.set('Body', message);
+  }
   const res = await fetch(`https://api.twilio.com/2010-04-01/Accounts/${SID}/Messages.json`, {
     method: 'POST',
     headers: {
