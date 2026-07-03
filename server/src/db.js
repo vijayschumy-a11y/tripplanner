@@ -194,6 +194,20 @@ CREATE TABLE IF NOT EXISTS advance_participants (
 ALTER TABLE trips ADD COLUMN IF NOT EXISTS invite_code TEXT;
 UPDATE trips SET invite_code = substr(md5(random()::text || id), 1, 10) WHERE invite_code IS NULL;
 CREATE UNIQUE INDEX IF NOT EXISTS trips_invite_code_uidx ON trips(invite_code) WHERE invite_code IS NOT NULL;
+
+-- Profile photo (small base64 data URL)
+ALTER TABLE users ADD COLUMN IF NOT EXISTS avatar TEXT;
+
+-- Persistent trip chat
+CREATE TABLE IF NOT EXISTS messages (
+  id         TEXT PRIMARY KEY,
+  trip_id    TEXT NOT NULL REFERENCES trips(id) ON DELETE CASCADE,
+  user_id    TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  name       TEXT NOT NULL,
+  text       TEXT NOT NULL,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS messages_trip_idx ON messages(trip_id, created_at);
 `;
 
 async function init() {

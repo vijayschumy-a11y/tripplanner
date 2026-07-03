@@ -7,6 +7,16 @@ export function Avatar({ user, size = 34 }) {
     .slice(0, 2)
     .join('')
     .toUpperCase();
+  if (user?.avatar) {
+    return (
+      <img
+        className="avatar"
+        src={user.avatar}
+        alt={user?.name || ''}
+        style={{ width: size, height: size, objectFit: 'cover' }}
+      />
+    );
+  }
   return (
     <div className="avatar" style={{ background: user?.avatar_color || '#334155', width: size, height: size, fontSize: size * 0.4 }}>
       {initials}

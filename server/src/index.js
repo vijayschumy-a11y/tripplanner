@@ -5,6 +5,7 @@ import { Server } from 'socket.io';
 import { fileURLToPath } from 'url';
 import path from 'path';
 import fs from 'fs';
+import { randomUUID } from 'crypto';
 
 import db from './db.js';
 import { verifyToken } from './lib/auth.js';
@@ -102,12 +103,15 @@ io.on('connection', (socket) => {
   });
 
   socket.on('chat:message', async ({ tripId, text }) => {
-    if (!text) return;
+    if (!text || !text.trim()) return;
     try {
       if (!(await isMember(tripId, user.id))) return;
-      io.to(tripId).emit('chat:message', {
-        userId: user.id, name: user.name, text, at: new Date().toISOString(),
-      });
+      const id = randomUUID();
+      const at = new Date().toISOString();
+      const clean = String(text).slice(0, 2000);
+      await db.prepare('INSERT INTO messages (id, trip_id, user_id, name, text) VALUES (?, ?, ?, ?, ?)')
+        .run(id, tripId, user.id, user.name, clean);
+      io.to(tripId).emit('chat:message', { id, userId: user.id, name: user.name, text: clean, at });
     } catch (e) {
       console.error('chat:message error', e.message);
     }

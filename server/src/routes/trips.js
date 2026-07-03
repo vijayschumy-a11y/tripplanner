@@ -37,7 +37,7 @@ async function isAdmin(tripId, userId) {
 function memberList(tripId) {
   return db
     .prepare(
-      `SELECT u.id, u.name, u.email, u.avatar_color, m.role
+      `SELECT u.id, u.name, u.email, u.phone, u.avatar_color, u.avatar, m.role
        FROM trip_members m JOIN users u ON u.id = m.user_id
        WHERE m.trip_id = ? ORDER BY m.joined_at`
     )
@@ -245,6 +245,15 @@ router.delete('/:id/checklist/:itemId', async (req, res) => {
   if (cur.scope === 'personal' && cur.owner_id !== req.user.id) return res.status(403).json({ error: 'Not your item' });
   await db.prepare('DELETE FROM checklist_items WHERE id = ?').run(cur.id);
   res.json({ ok: true });
+});
+
+// ---- Chat history ----
+router.get('/:id/messages', async (req, res) => {
+  if (!(await isMember(req.params.id, req.user.id))) return res.status(403).json({ error: 'Not a member' });
+  const rows = await db
+    .prepare('SELECT id, user_id, name, text, created_at FROM messages WHERE trip_id = ? ORDER BY created_at DESC LIMIT 100')
+    .all(req.params.id);
+  res.json({ messages: rows.reverse() });
 });
 
 // ---- Live locations (latest snapshot; realtime via socket.io) ----

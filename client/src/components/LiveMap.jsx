@@ -13,9 +13,6 @@ export default function LiveMap({ trip }) {
   const watchId = useRef(null);
   const [sharing, setSharing] = useState(false);
   const [people, setPeople] = useState({});
-  const [messages, setMessages] = useState([]);
-  const [text, setText] = useState('');
-  const chatEnd = useRef(null);
 
   useEffect(() => {
     map.current = L.map(mapRef.current).setView([trip.lat || 20.5937, trip.lng || 78.9629], trip.lat ? 12 : 5);
@@ -25,29 +22,23 @@ export default function LiveMap({ trip }) {
     socket.emit('trip:join', trip.id);
 
     const upsert = (u) => {
-      setPeople((prev) => ({ ...prev, [u.userId]: u }));
+      setPeople((prev) => ({ ...prev, [u.userId]: { ...u, at: u.updated_at || Date.now() } }));
       const color = u.avatar_color || '#3b82f6';
       const label = (u.name || '?')[0].toUpperCase();
-      if (markers.current[u.userId]) {
-        markers.current[u.userId].setLatLng([u.lat, u.lng]);
-      } else {
-        markers.current[u.userId] = L.marker([u.lat, u.lng], { icon: coloredPin(color, label) })
-          .addTo(map.current).bindPopup(u.name + (u.userId === user.id ? ' (you)' : ''));
-      }
+      if (markers.current[u.userId]) markers.current[u.userId].setLatLng([u.lat, u.lng]);
+      else markers.current[u.userId] = L.marker([u.lat, u.lng], { icon: coloredPin(color, label) })
+        .addTo(map.current).bindPopup(u.name + (u.userId === user.id ? ' (you)' : ''));
     };
 
     socket.on('location:snapshot', (list) => list.forEach(upsert));
     socket.on('location:update', upsert);
-    socket.on('chat:message', (m) => setMessages((prev) => [...prev, m]));
 
     return () => {
-      socket.off('location:snapshot'); socket.off('location:update'); socket.off('chat:message');
+      socket.off('location:snapshot'); socket.off('location:update');
       if (watchId.current) navigator.geolocation.clearWatch(watchId.current);
       map.current.remove();
     };
   }, [trip.id]);
-
-  useEffect(() => { chatEnd.current?.scrollIntoView({ behavior: 'smooth' }); }, [messages]);
 
   const toggleShare = () => {
     const socket = getSocket();
@@ -55,6 +46,7 @@ export default function LiveMap({ trip }) {
       if (watchId.current) navigator.geolocation.clearWatch(watchId.current);
       watchId.current = null;
       setSharing(false);
+      toast('Stopped sharing');
       return;
     }
     if (!navigator.geolocation) return toast('Geolocation not supported');
@@ -68,53 +60,48 @@ export default function LiveMap({ trip }) {
       { enableHighAccuracy: true, maximumAge: 5000 }
     );
     setSharing(true);
-    toast('Sharing your live location');
-  };
-
-  const send = () => {
-    if (!text.trim()) return;
-    getSocket().emit('chat:message', { tripId: trip.id, text: text.trim() });
-    setText('');
+    toast('You are now sharing your live location');
   };
 
   const list = Object.values(people);
+  const others = list.filter((p) => p.userId !== user.id);
 
   return (
-    <div className="detail-grid" style={{ gridTemplateColumns: '1fr 320px' }}>
-      <div>
-        <div className="between" style={{ marginBottom: 10 }}>
-          <span className="muted">{list.length} sharing location</span>
+    <div>
+      <div className="card" style={{ marginBottom: 12 }}>
+        <div className="between wrap" style={{ gap: 10 }}>
+          <div>
+            <strong>{sharing ? '🟢 You are sharing your live location' : '📡 Live location'}</strong>
+            <div className="muted" style={{ fontSize: 13 }}>
+              {sharing
+                ? 'Everyone on this trip who opens the Live tab can see you move on the map.'
+                : 'Tap share so your crew can see where you are in real time.'}
+            </div>
+          </div>
           <button className={`btn ${sharing ? 'danger' : 'primary'}`} onClick={toggleShare}>
             {sharing ? '⏹ Stop sharing' : '📡 Share my location'}
           </button>
         </div>
-        <div ref={mapRef} className="map" />
-        <div className="row wrap" style={{ marginTop: 10 }}>
-          {list.map((p) => (
-            <span key={p.userId} className="pill">
-              🟢 {p.name}{p.userId === user.id ? ' (you)' : ''}
-            </span>
-          ))}
-          {list.length === 0 && <span className="muted" style={{ fontSize: 13 }}>No one is sharing yet. Tap “Share my location”.</span>}
-        </div>
       </div>
 
-      <div className="card" style={{ display: 'flex', flexDirection: 'column' }}>
-        <h3 className="section-title">Trip chat</h3>
-        <div className="chat-box">
-          {messages.map((m, i) => (
-            <div key={i} className={`chat-msg ${m.userId === user.id ? 'me' : ''}`}>
-              {m.userId !== user.id && <div style={{ fontSize: 11, opacity: 0.7 }}>{m.name}</div>}
-              {m.text}
-            </div>
+      <div ref={mapRef} className="map" style={{ height: '58vh' }} />
+
+      <div className="card" style={{ marginTop: 12 }}>
+        <div className="between">
+          <h3 className="section-title" style={{ margin: 0 }}>On the map now</h3>
+          <span className="pill">{list.length} shared</span>
+        </div>
+        <div className="row wrap" style={{ marginTop: 8 }}>
+          {list.map((p) => (
+            <span key={p.userId} className="pill">🟢 {p.name}{p.userId === user.id ? ' (you)' : ''}</span>
           ))}
-          {messages.length === 0 && <p className="muted" style={{ fontSize: 13 }}>Say hi to your crew 👋</p>}
-          <div ref={chatEnd} />
+          {list.length === 0 && <span className="muted" style={{ fontSize: 13 }}>No one is sharing yet. Tap “Share my location” to start.</span>}
         </div>
-        <div className="row" style={{ marginTop: 10 }}>
-          <input className="input" value={text} onChange={(e) => setText(e.target.value)} placeholder="Message…" onKeyDown={(e) => e.key === 'Enter' && send()} />
-          <button className="btn primary" onClick={send}>Send</button>
-        </div>
+        {sharing && others.length === 0 && (
+          <p className="muted" style={{ fontSize: 12, marginTop: 8 }}>
+            You're sharing ✓ — others will appear here when they open this tab and tap share too.
+          </p>
+        )}
       </div>
     </div>
   );

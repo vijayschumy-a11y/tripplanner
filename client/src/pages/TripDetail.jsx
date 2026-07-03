@@ -9,6 +9,7 @@ import Itinerary from '../components/Itinerary.jsx';
 import LiveMap from '../components/LiveMap.jsx';
 import Checklist from '../components/Checklist.jsx';
 import Plan from '../components/Plan.jsx';
+import Chat from '../components/Chat.jsx';
 
 const TABS = [
   ['overview', 'Overview', '🏠'],
@@ -17,6 +18,7 @@ const TABS = [
   ['explore', 'Explore', '🗺️'],
   ['itinerary', 'Itinerary', '📅'],
   ['checklist', 'Checklist', '✅'],
+  ['chat', 'Chat', '💬'],
   ['live', 'Live', '📡'],
   ['members', 'People', '👥'],
 ];
@@ -61,6 +63,7 @@ export default function TripDetail() {
       {tab === 'explore' && <Explore trip={trip} />}
       {tab === 'itinerary' && <Itinerary tripId={id} trip={trip} />}
       {tab === 'checklist' && <Checklist tripId={id} />}
+      {tab === 'chat' && <Chat tripId={id} />}
       {tab === 'live' && <LiveMap trip={trip} />}
       {tab === 'members' && <Members tripId={id} trip={trip} members={members} onChange={load} />}
     </div>

@@ -7,6 +7,7 @@ import Login from './pages/Login.jsx';
 import Trips from './pages/Trips.jsx';
 import TripDetail from './pages/TripDetail.jsx';
 import JoinTrip from './pages/JoinTrip.jsx';
+import Profile from './components/Profile.jsx';
 
 const AuthCtx = createContext(null);
 export const useAuth = () => useContext(AuthCtx);
@@ -36,12 +37,13 @@ export default function App() {
     closeSocket();
     setUser(null);
   };
+  const updateUser = (u) => setUser(u);
 
   if (loading)
     return <div className="auth-wrap"><div className="spinner" /></div>;
 
   return (
-    <AuthCtx.Provider value={{ user, login, logout }}>
+    <AuthCtx.Provider value={{ user, login, logout, updateUser }}>
       <ToastProvider>
         {user && <TopBar />}
         <Routes>
@@ -59,14 +61,18 @@ export default function App() {
 function TopBar() {
   const { user, logout } = useAuth();
   const nav = useNavigate();
+  const [showProfile, setShowProfile] = useState(false);
   return (
     <div className="topbar">
       <Link to="/" className="brand"><span className="logo">🧭</span> TripPlanner</Link>
       <div className="row" style={{ alignItems: 'center' }}>
-        <Avatar user={user} />
-        <span className="muted" style={{ alignSelf: 'center' }}>{user.name}</span>
+        <button className="btn ghost sm row" style={{ alignItems: 'center', gap: 8 }} onClick={() => setShowProfile(true)} title="Edit profile">
+          <Avatar user={user} size={30} />
+          <span>{user.name}</span>
+        </button>
         <button className="btn ghost sm" onClick={() => { logout(); nav('/login'); }}>Sign out</button>
       </div>
+      {showProfile && <Profile onClose={() => setShowProfile(false)} />}
     </div>
   );
 }

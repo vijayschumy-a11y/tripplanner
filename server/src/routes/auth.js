@@ -19,7 +19,7 @@ const normalizePhone = (p) => {
   return d;
 };
 const genCode = () => String(Math.floor(100000 + Math.random() * 900000));
-const publicUser = (u) => ({ id: u.id, name: u.name, email: u.email, phone: u.phone, avatar_color: u.avatar_color });
+const publicUser = (u) => ({ id: u.id, name: u.name, email: u.email, phone: u.phone, avatar_color: u.avatar_color, avatar: u.avatar });
 
 // ---------- Email + password ----------
 router.post('/register', async (req, res) => {
@@ -142,7 +142,24 @@ router.post('/otp/verify', async (req, res) => {
 
 // ---------- Session / directory ----------
 router.get('/me', requireAuth, async (req, res) => {
-  const row = await db.prepare('SELECT id, name, email, phone, avatar_color FROM users WHERE id = ?').get(req.user.id);
+  const row = await db.prepare('SELECT id, name, email, phone, avatar_color, avatar FROM users WHERE id = ?').get(req.user.id);
+  res.json({ user: row });
+});
+
+// Update own profile: display name and/or photo (small base64 data URL)
+router.patch('/profile', requireAuth, async (req, res) => {
+  const cur = await db.prepare('SELECT * FROM users WHERE id = ?').get(req.user.id);
+  if (!cur) return res.status(404).json({ error: 'Not found' });
+  const name = req.body?.name != null ? String(req.body.name).trim() : cur.name;
+  if (!name) return res.status(400).json({ error: 'Name cannot be empty' });
+  let avatar = cur.avatar;
+  if ('avatar' in (req.body || {})) {
+    avatar = req.body.avatar || null; // null clears it
+    if (avatar && (typeof avatar !== 'string' || avatar.length > 400000))
+      return res.status(400).json({ error: 'Photo too large' });
+  }
+  await db.prepare('UPDATE users SET name = ?, avatar = ? WHERE id = ?').run(name, avatar, req.user.id);
+  const row = await db.prepare('SELECT id, name, email, phone, avatar_color, avatar FROM users WHERE id = ?').get(req.user.id);
   res.json({ user: row });
 });
 
