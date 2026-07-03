@@ -1,6 +1,7 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { L, coloredPin } from '../lib/leaflet.js';
 import { getSocket } from '../lib/socket.js';
+import { api } from '../lib/api.js';
 import { useToast } from '../lib/ui.jsx';
 import { useAuth } from '../App.jsx';
 
@@ -37,6 +38,9 @@ export default function LiveMap({ trip }) {
   const [meet, setMeet] = useState(trip.meet_lat != null ? { lat: trip.meet_lat, lng: trip.meet_lng, label: trip.meet_label } : null);
   const [placing, setPlacing] = useState(false);
   const [meetName, setMeetName] = useState('');
+  const [query, setQuery] = useState('');
+  const [results, setResults] = useState([]);
+  const [searching, setSearching] = useState(false);
   const [, force] = useState(0);
 
   const drawMeet = (m) => {
@@ -45,12 +49,20 @@ export default function LiveMap({ trip }) {
       meetMarker.current = L.marker([m.lat, m.lng], { icon: coloredPin('#f59e0b', '🚩'), zIndexOffset: 1000 })
         .addTo(map.current)
         .bindPopup(`<strong>🚩 ${m.label || 'Meeting point'}</strong><br/><a href="${navLink(m.lat, m.lng)}" target="_blank">Navigate here ↗</a>`);
+      map.current.setView([m.lat, m.lng], 14);
     }
   };
 
   useEffect(() => {
     map.current = L.map(mapRef.current).setView([trip.lat || 20.5937, trip.lng || 78.9629], trip.lat ? 12 : 5);
     L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { attribution: '© OpenStreetMap', maxZoom: 19 }).addTo(map.current);
+
+    // Trip destination pin (everyone can navigate to it)
+    if (trip.lat != null) {
+      L.marker([trip.lat, trip.lng], { icon: coloredPin('#2563eb', '🏁') })
+        .addTo(map.current)
+        .bindPopup(`<strong>🏁 ${trip.destination}</strong><br/><a href="${navLink(trip.lat, trip.lng)}" target="_blank">Navigate here ↗</a>`);
+    }
 
     const socket = getSocket();
     socket.emit('trip:join', trip.id);
@@ -72,7 +84,6 @@ export default function LiveMap({ trip }) {
       if (m.by) toast(m.lat != null ? `${m.by} set the meeting point` : `${m.by} cleared the meeting point`);
     });
 
-    // tap map to place the meeting point (when in placing mode)
     map.current.on('click', (e) => {
       if (!placingRef.current) return;
       placingRef.current = false; setPlacing(false);
@@ -88,6 +99,29 @@ export default function LiveMap({ trip }) {
     };
   }, [trip.id]);
 
+  // ---- meeting point actions ----
+  const searchPlace = async () => {
+    if (!query.trim()) return;
+    setSearching(true);
+    try {
+      const d = await api.get(`/places/geocode?q=${encodeURIComponent(query)}`);
+      setResults(d.results);
+      if (!d.results.length) toast('No place found — try a fuller name');
+    } catch { toast('Search failed'); } finally { setSearching(false); }
+  };
+  const pickResult = (r) => {
+    const label = meetName.trim() || r.name.split(',').slice(0, 2).join(',');
+    getSocket().emit('meet:set', { tripId: trip.id, lat: r.lat, lng: r.lng, label });
+    setResults([]); setQuery('');
+  };
+  const startPlacing = () => { meetNameRef.current = meetName.trim() || 'Meeting point'; placingRef.current = true; setPlacing(true); toast('Tap the map to drop the meeting point'); };
+  const meetHere = () => {
+    if (!myPos.current) return toast('Tap “Locate me” or “Share” first');
+    getSocket().emit('meet:set', { tripId: trip.id, lat: myPos.current.lat, lng: myPos.current.lng, label: meetName.trim() || 'Meeting point' });
+  };
+  const clearMeet = () => getSocket().emit('meet:clear', { tripId: trip.id });
+
+  // ---- my location ----
   const toggleShare = () => {
     const socket = getSocket();
     if (sharing) {
@@ -108,7 +142,6 @@ export default function LiveMap({ trip }) {
     );
     setSharing(true); toast('You are now sharing your live location');
   };
-
   const locateMe = () => {
     if (!navigator.geolocation) return toast('Geolocation not supported');
     navigator.geolocation.getCurrentPosition(
@@ -116,13 +149,6 @@ export default function LiveMap({ trip }) {
       () => toast('Location permission denied')
     );
   };
-
-  const startPlacing = () => { meetNameRef.current = meetName.trim() || 'Meeting point'; placingRef.current = true; setPlacing(true); toast('Tap the map to drop the meeting point'); };
-  const meetHere = () => {
-    if (!myPos.current) return toast('Tap “Locate me” or “Share” first');
-    getSocket().emit('meet:set', { tripId: trip.id, lat: myPos.current.lat, lng: myPos.current.lng, label: meetName.trim() || 'Meeting point' });
-  };
-  const clearMeet = () => getSocket().emit('meet:clear', { tripId: trip.id });
 
   const centerOn = (p) => { map.current.setView([p.lat, p.lng], 15); markers.current[p.userId]?.openPopup(); };
   const list = Object.values(people);
@@ -145,31 +171,52 @@ export default function LiveMap({ trip }) {
         </div>
       </div>
 
+      {trip.lat != null && (
+        <div className="card" style={{ marginBottom: 12 }}>
+          <div className="between">
+            <div><strong>🏁 Trip destination</strong><div className="muted" style={{ fontSize: 13 }}>{trip.destination}</div></div>
+            <a className="btn sm" href={navLink(trip.lat, trip.lng)} target="_blank" rel="noreferrer">Navigate ↗</a>
+          </div>
+        </div>
+      )}
+
       {/* Meeting point */}
       <div className="card" style={{ marginBottom: 12 }}>
         <h3 className="section-title">🚩 Meeting point</h3>
-        {meet ? (
+        {meet && (
           <div className="list-item">
             <span style={{ fontSize: 18 }}>🚩</span>
             <div className="grow">
               <strong>{meet.label || 'Meeting point'}</strong>
-              <div className="muted" style={{ fontSize: 12 }}>{distToMeet != null ? `${fmtDist(distToMeet)} from you` : 'Shared with everyone'}</div>
+              <div className="muted" style={{ fontSize: 12 }}>{distToMeet != null ? `${fmtDist(distToMeet)} from you · shared with all` : 'Shared with everyone'}</div>
             </div>
             <a className="btn sm" href={navLink(meet.lat, meet.lng)} target="_blank" rel="noreferrer">Navigate ↗</a>
             <button className="btn danger sm" onClick={clearMeet}>Clear</button>
           </div>
-        ) : (
-          <>
-            <p className="muted" style={{ fontSize: 13, marginTop: 0 }}>Drop a spot everyone can navigate to — a café, hotel or gate.</p>
-            <div className="row" style={{ marginBottom: 8 }}>
-              <input className="input" value={meetName} onChange={(e) => setMeetName(e.target.value)} placeholder="Name (e.g. Beach Road café)" />
-            </div>
-            <div className="row wrap">
-              <button className={`btn ${placing ? 'primary' : ''}`} onClick={startPlacing}>{placing ? '👆 Tap the map…' : '📌 Tap map to place'}</button>
-              <button className="btn" onClick={meetHere}>📍 Use my location</button>
-            </div>
-          </>
         )}
+        <p className="muted" style={{ fontSize: 13, margin: '8px 0' }}>{meet ? 'Change it — ' : ''}search a place, tap the map, or use your location.</p>
+        <div className="field" style={{ marginBottom: 8 }}>
+          <div className="row">
+            <input className="input" value={meetName} onChange={(e) => setMeetName(e.target.value)} placeholder="Label (optional, e.g. Beach café)" />
+          </div>
+        </div>
+        <div className="row" style={{ marginBottom: results.length ? 8 : 0 }}>
+          <input className="input" value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Search a place…" onKeyDown={(e) => e.key === 'Enter' && searchPlace()} />
+          <button className="btn primary" onClick={searchPlace} disabled={searching}>{searching ? '…' : 'Find'}</button>
+        </div>
+        {results.length > 0 && (
+          <div style={{ maxHeight: 160, overflow: 'auto', marginBottom: 8 }}>
+            {results.map((r, i) => (
+              <div key={i} className="list-item" style={{ cursor: 'pointer' }} onClick={() => pickResult(r)}>
+                <span>📍</span><span style={{ fontSize: 13 }}>{r.name}</span>
+              </div>
+            ))}
+          </div>
+        )}
+        <div className="row wrap">
+          <button className={`btn ${placing ? 'primary' : ''}`} onClick={startPlacing}>{placing ? '👆 Tap the map…' : '📌 Tap map'}</button>
+          <button className="btn" onClick={meetHere}>📍 Use my location</button>
+        </div>
       </div>
 
       <div ref={mapRef} className="map" style={{ height: '55vh' }} />
