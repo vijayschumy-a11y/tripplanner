@@ -15,7 +15,7 @@ const fmtDist = (m) => (m == null ? '' : m < 1000 ? `${Math.round(m)} m` : `${(m
 const navLink = (lat, lng) => `https://www.google.com/maps/dir/?api=1&destination=${lat},${lng}`;
 // Open a place in Google Maps by name (Google resolves local/informal names well)
 const gmapsSearch = (q) => `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(q)}`;
-const isMapLink = (s) => /^https?:\/\//i.test(s) && /(google\.[a-z.]+\/maps|maps\.google|goo\.gl|maps\.app\.goo\.gl)/i.test(s);
+const isMapLink = (s) => /^https?:\/\//i.test(s) && /(google\.[a-z.]+\/(maps|search)|maps\.google|goo\.gl|maps\.app\.goo\.gl|share\.google|g\.co)/i.test(s);
 // Best link for the meeting point: by name if we have one, else by coords
 const meetLink = (m) => (m.label ? gmapsSearch(m.label) : navLink(m.lat, m.lng));
 const ago = (t) => {
@@ -120,8 +120,8 @@ export default function LiveMap({ trip }) {
       if (isMapLink(q)) {
         const d = await api.get(`/places/resolve?url=${encodeURIComponent(q)}`);
         const r = d.result;
-        getSocket().emit('meet:set', { tripId: trip.id, lat: r.lat, lng: r.lng, label: r.label || 'Meeting point' });
-        toast('Pinned from your link ✓');
+        getSocket().emit('meet:set', { tripId: trip.id, lat: r.lat ?? null, lng: r.lng ?? null, label: r.label || 'Meeting point' });
+        toast(r.lat != null ? 'Pinned from your link ✓' : 'Set from link (by name)');
         setQuery('');
         return;
       }

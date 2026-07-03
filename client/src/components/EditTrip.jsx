@@ -18,7 +18,7 @@ export default function EditTrip({ trip, onClose, onSaved }) {
   const [busy, setBusy] = useState(false);
   const set = (k) => (e) => setForm({ ...form, [k]: e.target.value });
 
-  const isMapLink = (s) => /^https?:\/\//i.test(s) && /(google\.[a-z.]+\/maps|maps\.google|goo\.gl|maps\.app\.goo\.gl)/i.test(s);
+  const isMapLink = (s) => /^https?:\/\//i.test(s) && /(google\.[a-z.]+\/(maps|search)|maps\.google|goo\.gl|maps\.app\.goo\.gl|share\.google|g\.co)/i.test(s);
   const search = async () => {
     const q = form.destination.trim();
     if (!q) return;
@@ -27,9 +27,9 @@ export default function EditTrip({ trip, onClose, onSaved }) {
       if (isMapLink(q)) {
         const d = await api.get(`/places/resolve?url=${encodeURIComponent(q)}`);
         const r = d.result;
-        setPicked({ lat: r.lat, lng: r.lng });
+        if (r.lat != null) setPicked({ lat: r.lat, lng: r.lng });
         setForm({ ...form, destination: r.label || form.destination });
-        toast('Location set from link ✓');
+        toast(r.lat != null ? 'Location set from link ✓' : 'Name set from link');
         return;
       }
       const d = await api.get(`/places/geocode?q=${encodeURIComponent(q)}`);

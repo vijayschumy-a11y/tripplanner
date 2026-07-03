@@ -90,13 +90,31 @@ async function nominatim(query) {
 export async function resolveMapLink(url) {
   let finalUrl = url, html = '';
   try {
-    const res = await fetch(url, { redirect: 'follow', headers: { 'User-Agent': UA } });
+    const res = await fetch(url, { redirect: 'follow', headers: { 'User-Agent': 'Mozilla/5.0 (compatible; TripPlanner/1.0)' } });
     finalUrl = res.url || url;
     html = await res.text().catch(() => '');
   } catch { /* fall back to parsing the raw url */ }
-  const coords = extractCoords(finalUrl) || extractCoords(url) || extractCoordsFromHtml(html);
-  const label = extractLabel(finalUrl) || extractLabel(url);
-  return coords ? { ...coords, label } : null;
+  let coords = extractCoords(finalUrl) || extractCoords(url) || extractCoordsFromHtml(html);
+  // share.google / knowledge-panel links carry a place NAME (q=...) but no coords
+  const label = extractLabel(finalUrl) || extractLabel(url) || extractQueryName(finalUrl) || extractTitle(html);
+  if (!coords && label) {
+    try { const g = await geocode(label); if (g.length) coords = { lat: g[0].lat, lng: g[0].lng }; } catch { /* keep name only */ }
+  }
+  if (!coords && !label) return null;
+  return { lat: coords?.lat ?? null, lng: coords?.lng ?? null, label: label || null };
+}
+
+function extractQueryName(u = '') {
+  const m = u.match(/[?&](?:q|query)=([^&]+)/);
+  if (!m) return null;
+  const v = decodeURIComponent(m[1].replace(/\+/g, ' ')).trim();
+  return /^-?\d+\.\d+,-?\d+\.\d+$/.test(v) ? null : v.slice(0, 80);
+}
+function extractTitle(html = '') {
+  const m = html.match(/<title>([^<]+)<\/title>/i);
+  if (!m) return null;
+  const t = m[1].replace(/\s*-\s*Google (Search|Maps).*$/i, '').trim();
+  return t && t.length > 1 ? t.slice(0, 80) : null;
 }
 
 function extractCoords(u = '') {
