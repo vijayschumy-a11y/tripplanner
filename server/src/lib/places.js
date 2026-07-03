@@ -95,6 +95,11 @@ export async function resolveMapLink(url) {
     html = await res.text().catch(() => '');
   } catch { /* fall back to parsing the raw url */ }
   let coords = extractCoords(finalUrl) || extractCoords(url) || extractCoordsFromHtml(html);
+  // consent/redirect pages wrap the real maps URL in a continue=/url= param
+  if (!coords) {
+    const wrapped = (finalUrl.match(/[?&](?:continue|url)=([^&]+)/) || [])[1];
+    if (wrapped) { try { coords = extractCoords(decodeURIComponent(wrapped)); } catch { /* ignore */ } }
+  }
   // share.google / knowledge-panel links carry a place NAME (q=...) but no coords
   const label = extractLabel(finalUrl) || extractLabel(url) || extractQueryName(finalUrl) || extractTitle(html);
   if (!coords && label) {
