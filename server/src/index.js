@@ -34,7 +34,7 @@ if (process.env.SEED_ON_BOOT !== 'false') {
 
 const app = express();
 app.use(cors({ origin: [CLIENT_ORIGIN, 'http://localhost:5173', 'http://127.0.0.1:5173'] }));
-app.use(express.json());
+app.use(express.json({ limit: '3mb' })); // base64 cover photos / avatars exceed the 100kb default
 
 app.get('/api/health', (_req, res) => res.json({ ok: true, time: new Date().toISOString() }));
 app.use('/api/auth', authRoutes);
