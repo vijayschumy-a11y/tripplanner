@@ -109,9 +109,9 @@ export default function Chat({ tripId, members = [] }) {
   };
 
   return (
-    <div className="card" style={{ maxWidth: 680, margin: '0 auto', display: 'flex', flexDirection: 'column' }}>
+    <div className="card" style={{ maxWidth: 680, margin: '0 auto', display: 'flex', flexDirection: 'column', height: 'calc(100dvh - 200px)', minHeight: 380 }}>
       <h3 className="section-title">Trip chat 💬</h3>
-      <div className="chat-box" style={{ height: '52vh' }}>
+      <div className="chat-box" style={{ flex: 1, minHeight: 0 }}>
         {messages.length === 0 && <p className="muted" style={{ fontSize: 13 }}>No messages yet. Say hi to your crew 👋</p>}
         {messages.map((m, i) => (
           <div key={m.id || i} className={`chat-msg ${m.userId === user.id ? 'me' : ''}`}>

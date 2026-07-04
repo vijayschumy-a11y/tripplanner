@@ -87,7 +87,8 @@ label { font-size: 13px; color: var(--muted); display: block; margin-bottom: 6px
 .topbar {
   position: sticky; top: 0; z-index: 500;
   display: flex; align-items: center; justify-content: space-between;
-  padding: 12px 20px; background: rgba(11,17,32,.8); backdrop-filter: blur(10px);
+  padding: calc(12px + env(safe-area-inset-top, 0px)) max(20px, env(safe-area-inset-right, 0px)) 12px max(20px, env(safe-area-inset-left, 0px));
+  background: rgba(11,17,32,.92); backdrop-filter: blur(10px);
   border-bottom: 1px solid var(--border);
 }
 .container { max-width: 1200px; margin: 0 auto; padding: 20px; }
