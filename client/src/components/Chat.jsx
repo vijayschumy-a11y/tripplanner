@@ -164,12 +164,14 @@ export default function Chat({ tripId, members = [] }) {
         </div>
       )}
 
-      <div className="row" style={{ marginTop: 10 }}>
+      <div className="row" style={{ gap: 6, marginTop: 8 }}>
         <button className="btn" onClick={() => { setShowEmoji((v) => !v); setShowGif(false); }} title="Emojis">😊</button>
         <button className="btn" onClick={() => fileRef.current?.click()} title="Send image">🖼️</button>
         <button className="btn" onClick={() => { setShowGif((v) => !v); setShowEmoji(false); }} title="GIFs & stickers">GIF</button>
         <input ref={fileRef} type="file" accept="image/*" style={{ display: 'none' }} onChange={onImage} />
-        <input ref={inputRef} className="input" value={text} onChange={onChange} placeholder="Message… @ to tag" onKeyDown={(e) => { if (e.key === 'Enter' && !suggestions.length) send(); }} />
+      </div>
+      <div className="row" style={{ marginTop: 8 }}>
+        <input ref={inputRef} className="input" style={{ flex: 1, minWidth: 0 }} value={text} onChange={onChange} placeholder="Message… @ to tag" onKeyDown={(e) => { if (e.key === 'Enter' && !suggestions.length) send(); }} />
         <button className="btn primary" onClick={send}>Send</button>
       </div>
     </div>
