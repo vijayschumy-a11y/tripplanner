@@ -62,4 +62,5 @@ export const CATEGORY_ICON = {
   food: '🍽️', transport: '🚗', stay: '🏨', shopping: '🛍️', activity: '🎟️',
   fuel: '⛽', general: '💳', atm: '🏧', petrol: '⛽', hospital: '🏥',
   hotel: '🏨', attraction: '📸', parking: '🅿️', toilets: '🚻', cafe: '☕',
+  playground: '🎠', themepark: '🎡', park: '🌳', museum: '🏛️', mall: '🛍️', beach: '🏖️',
 };

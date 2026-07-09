@@ -12,11 +12,18 @@ const CATEGORY_QUERY = {
   petrol:      'node["amenity"="fuel"]',
   hospital:    'node["amenity"~"hospital|clinic|pharmacy"]',
   hotel:       'node["tourism"~"hotel|guest_house|hostel"]',
-  attraction:  'node["tourism"~"attraction|viewpoint|museum|zoo|theme_park"]',
+  attraction:  'node["tourism"~"attraction|viewpoint|artwork|monument"]',
   parking:     'node["amenity"="parking"]',
   toilets:     'node["amenity"="toilets"]',
   cafe:        'node["amenity"="cafe"]',
   shopping:    'node["shop"~"mall|supermarket|convenience"]',
+  // Discover / family & kids
+  playground:  'node["leisure"~"playground|water_park"]',
+  themepark:   'node["tourism"~"theme_park|zoo|aquarium"]',
+  park:        'node["leisure"~"park|garden|nature_reserve"]',
+  museum:      'node["tourism"~"museum|gallery|artwork"]',
+  mall:        'node["shop"~"mall|department_store"]',
+  beach:       'node["natural"="beach"]',
 };
 
 export async function nearby(category, lat, lng, radius = 3000) {

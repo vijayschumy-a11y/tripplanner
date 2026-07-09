@@ -3,16 +3,27 @@ import { L, coloredPin } from '../lib/leaflet.js';
 import { api } from '../lib/api.js';
 import { useToast, CATEGORY_ICON } from '../lib/ui.jsx';
 
-const CATEGORIES = [
-  ['food', 'Food', '🍽️'],
-  ['cafe', 'Cafés', '☕'],
-  ['atm', 'ATM', '🏧'],
-  ['petrol', 'Petrol', '⛽'],
-  ['hospital', 'Medical', '🏥'],
-  ['hotel', 'Stay', '🏨'],
-  ['attraction', 'Sights', '📸'],
-  ['parking', 'Parking', '🅿️'],
-  ['shopping', 'Shops', '🛍️'],
+const GROUPS = [
+  ['👨‍👩‍👧 Family & Kids', [
+    ['playground', 'Play areas', '🎠'],
+    ['themepark', 'Theme parks & zoo', '🎡'],
+    ['park', 'Parks', '🌳'],
+    ['beach', 'Beaches', '🏖️'],
+  ]],
+  ['📸 See & do', [
+    ['attraction', 'Sights', '📸'],
+    ['museum', 'Museums & galleries', '🏛️'],
+    ['mall', 'Malls & offers', '🛍️'],
+    ['hotel', 'Stay', '🏨'],
+  ]],
+  ['🍽️ Essentials', [
+    ['food', 'Food', '🍽️'],
+    ['cafe', 'Cafés', '☕'],
+    ['atm', 'ATM', '🏧'],
+    ['petrol', 'Petrol', '⛽'],
+    ['hospital', 'Medical', '🏥'],
+    ['parking', 'Parking', '🅿️'],
+  ]],
 ];
 
 export default function Explore({ trip }) {
@@ -106,10 +117,15 @@ export default function Explore({ trip }) {
           <button className="btn" onClick={geocode}>Go</button>
           <button className="btn" onClick={useMyLocation}>📍 Me</button>
         </div>
-        <div className="chip-row">
-          {CATEGORIES.map(([key, label, icon]) => (
-            <div key={key} className={`chip ${cat === key ? 'active' : ''}`} onClick={() => search(key)}>
-              {icon} {label}
+        <div style={{ marginBottom: 6 }}>
+          {GROUPS.map(([label, cats]) => (
+            <div key={label} style={{ marginBottom: 6 }}>
+              <div className="muted" style={{ fontSize: 11, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '.05em', margin: '6px 0 4px' }}>{label}</div>
+              <div className="chip-row" style={{ marginBottom: 0 }}>
+                {cats.map(([key, l, icon]) => (
+                  <div key={key} className={`chip ${cat === key ? 'active' : ''}`} onClick={() => search(key)}>{icon} {l}</div>
+                ))}
+              </div>
             </div>
           ))}
         </div>
