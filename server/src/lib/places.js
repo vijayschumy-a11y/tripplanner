@@ -5,30 +5,31 @@ const OVERPASS = 'https://overpass-api.de/api/interpreter';
 const NOMINATIM = 'https://nominatim.openstreetmap.org';
 const UA = 'TripPlanner/1.0 (domestic trip planner demo)';
 
-// Map friendly categories -> OSM tag filters
+// Map friendly categories -> OSM tag filters (each queried as node/way/relation so areas count too)
 const CATEGORY_QUERY = {
-  food:        'node["amenity"~"restaurant|cafe|fast_food|food_court"]',
-  atm:         'node["amenity"="atm"]',
-  petrol:      'node["amenity"="fuel"]',
-  hospital:    'node["amenity"~"hospital|clinic|pharmacy"]',
-  hotel:       'node["tourism"~"hotel|guest_house|hostel"]',
-  attraction:  'node["tourism"~"attraction|viewpoint|artwork|monument"]',
-  parking:     'node["amenity"="parking"]',
-  toilets:     'node["amenity"="toilets"]',
-  cafe:        'node["amenity"="cafe"]',
-  shopping:    'node["shop"~"mall|supermarket|convenience"]',
+  food:        ['["amenity"~"restaurant|cafe|fast_food|food_court"]'],
+  atm:         ['["amenity"="atm"]'],
+  petrol:      ['["amenity"="fuel"]'],
+  hospital:    ['["amenity"~"hospital|clinic|pharmacy"]'],
+  hotel:       ['["tourism"~"hotel|guest_house|hostel"]'],
+  attraction:  ['["tourism"~"attraction|viewpoint|artwork|monument"]', '["historic"]'],
+  parking:     ['["amenity"="parking"]'],
+  toilets:     ['["amenity"="toilets"]'],
+  cafe:        ['["amenity"="cafe"]'],
+  shopping:    ['["shop"~"mall|supermarket|convenience"]'],
   // Discover / family & kids
-  playground:  'node["leisure"~"playground|water_park"]',
-  themepark:   'node["tourism"~"theme_park|zoo|aquarium"]',
-  park:        'node["leisure"~"park|garden|nature_reserve"]',
-  museum:      'node["tourism"~"museum|gallery|artwork"]',
-  mall:        'node["shop"~"mall|department_store"]',
-  beach:       'node["natural"="beach"]',
+  playground:  ['["leisure"~"playground|water_park"]', '["amenity"="theatre"]'],
+  themepark:   ['["tourism"~"theme_park|zoo|aquarium"]', '["leisure"="amusement_arcade"]'],
+  park:        ['["leisure"~"park|garden|nature_reserve"]'],
+  museum:      ['["tourism"~"museum|gallery"]', '["amenity"="arts_centre"]'],
+  mall:        ['["shop"~"mall|department_store"]'],
+  beach:       ['["natural"="beach"]'],
 };
 
 export async function nearby(category, lat, lng, radius = 3000) {
-  const filter = CATEGORY_QUERY[category] || CATEGORY_QUERY.food;
-  const q = `[out:json][timeout:20];(${filter}(around:${radius},${lat},${lng}););out body 40;`;
+  const filters = CATEGORY_QUERY[category] || CATEGORY_QUERY.food;
+  const body = filters.map((f) => `nwr${f}(around:${radius},${lat},${lng});`).join('');
+  const q = `[out:json][timeout:25];(${body});out center 60;`;
 
   const res = await fetch(OVERPASS, {
     method: 'POST',
@@ -38,19 +39,25 @@ export async function nearby(category, lat, lng, radius = 3000) {
   if (!res.ok) throw new Error('Overpass error ' + res.status);
   const data = await res.json();
 
+  const seen = new Set();
   return (data.elements || [])
-    .filter((el) => el.lat && el.lon && el.tags?.name)
-    .map((el) => ({
-      id: String(el.id),
-      name: el.tags.name,
-      category,
-      lat: el.lat,
-      lng: el.lon,
-      address: [el.tags['addr:street'], el.tags['addr:city']].filter(Boolean).join(', '),
-      phone: el.tags.phone || el.tags['contact:phone'] || null,
-      cuisine: el.tags.cuisine || null,
-      distance: haversine(lat, lng, el.lat, el.lon),
-    }))
+    .map((el) => {
+      const plat = el.lat ?? el.center?.lat;
+      const plon = el.lon ?? el.center?.lon;
+      if (plat == null || plon == null || !el.tags?.name) return null;
+      return {
+        id: String(el.id),
+        name: el.tags.name,
+        category,
+        lat: plat,
+        lng: plon,
+        address: [el.tags['addr:street'], el.tags['addr:city']].filter(Boolean).join(', '),
+        phone: el.tags.phone || el.tags['contact:phone'] || null,
+        cuisine: el.tags.cuisine || null,
+        distance: haversine(lat, lng, plat, plon),
+      };
+    })
+    .filter((r) => r && !seen.has(r.name.toLowerCase()) && seen.add(r.name.toLowerCase()))
     .sort((a, b) => a.distance - b.distance);
 }
 
